@@ -209,6 +209,7 @@ impl Worker for TcpSendWorker {
             let msg = TransportMessage::v1(route![], route![], vec![]);
             let msg = prepare_message(msg)?;
             // Sending empty heartbeat
+            dbg!(ockam_core::hex::encode(&msg[..]));
             if tx.write_all(&msg).await.is_err() {
                 warn!("Failed to send heartbeat to peer {}", self.peer);
                 ctx.stop_worker(ctx.address()).await?;
@@ -218,12 +219,13 @@ impl Worker for TcpSendWorker {
 
             debug!("Sent heartbeat to peer {}", self.peer);
         } else {
-            let mut msg = TransportMessage::decode(msg.payload())?;
+            let mut msg = dbg!(TransportMessage::decode(msg.payload())?);
             // Remove our own address from the route so the other end
             // knows what to do with the incoming message
             msg.onward_route.step()?;
             // Create a message buffer with pre-pended length
             let msg = prepare_message(msg)?;
+            dbg!(ockam_core::hex::encode(&msg[..]));
 
             if tx.write_all(msg.as_slice()).await.is_err() {
                 warn!("Failed to send message to peer {}", self.peer);

@@ -249,6 +249,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bstr"
+version = "0.2.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba3569f383e8f1598449f1a423e72e99569137b47740b1da11ef19af3d5c3223"
+dependencies = [
+ "lazy_static",
+ "memchr",
+ "regex-automata",
+]
+
+[[package]]
 name = "bunt"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -620,10 +631,12 @@ name = "file_transfer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bstr",
  "ockam",
  "serde 1.0.131",
  "structopt",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1458,6 +1471,7 @@ dependencies = [
 name = "ockam_transport_tcp"
 version = "0.38.1-dev"
 dependencies = [
+ "bstr",
  "futures 0.3.17",
  "hashbrown 0.9.1",
  "ockam_core",
@@ -2432,7 +2446,19 @@ checksum = "375a639232caf30edfc78e8d89b2d4c375515393e7af7e16f01cd96917fb2105"
 dependencies = [
  "cfg-if",
  "pin-project-lite",
+ "tracing-attributes",
  "tracing-core",
+]
+
+[[package]]
+name = "tracing-attributes"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4f480b8f81512e825f337ad51e94c1eb5d3bbdf2b363dcd01e2b19a9ffe3f8e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

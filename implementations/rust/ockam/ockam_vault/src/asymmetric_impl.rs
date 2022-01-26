@@ -38,22 +38,31 @@ impl SoftwareVault {
             }
         }
     }
-}
-
-#[async_trait]
-impl AsymmetricVault for SoftwareVault {
-    async fn ec_diffie_hellman(
-        &mut self,
+    pub fn ec_diffie_hellman_sync(
+        &self,
         context: &Secret,
         peer_public_key: &PublicKey,
     ) -> Result<Secret> {
-        let entry = self.get_entry(context)?;
+        let storage = self.inner.read();
+        let entry = storage.get_entry(context)?;
 
         let dh = Self::ecdh_internal(entry, peer_public_key)?;
 
         let attributes =
             SecretAttributes::new(SecretType::Buffer, SecretPersistence::Ephemeral, dh.len());
-        self.secret_import(&dh, attributes).await
+        self.secret_import_sync(&dh, attributes)
+    }
+}
+
+#[async_trait]
+impl AsymmetricVault for SoftwareVault {
+    #[inline]
+    async fn ec_diffie_hellman(
+        &self,
+        context: &Secret,
+        peer_public_key: &PublicKey,
+    ) -> Result<Secret> {
+        self.ec_diffie_hellman_sync(context, peer_public_key)
     }
 }
 

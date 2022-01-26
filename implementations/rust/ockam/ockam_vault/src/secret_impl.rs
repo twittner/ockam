@@ -17,9 +17,9 @@ cfg_if! {
 }
 
 impl SoftwareVault {
-    /// Compute key id from secret and attributes. Only Curve25519 and Buffer types are supported
-    async fn compute_key_id(
-        &mut self,
+    /// Synchronous equivalent of [`SoftwareVault::compute_key_id`].
+    pub fn compute_key_id_sync(
+        &self,
         secret: &[u8],
         attributes: &SecretAttributes,
     ) -> Result<Option<KeyId>> {
@@ -32,25 +32,19 @@ impl SoftwareVault {
                     CURVE25519_SECRET_LENGTH
                 ]);
                 let public = x25519_dalek::PublicKey::from(&sk);
-                Some(
-                    self.compute_key_id_for_public_key(&PublicKey::new(
-                        public.as_bytes().to_vec(),
-                        SecretType::X25519,
-                    ))
-                    .await?,
-                )
+                Some(self.compute_key_id_for_public_key_sync(&PublicKey::new(
+                    public.as_bytes().to_vec(),
+                    SecretType::X25519,
+                ))?)
             }
             SecretType::Ed25519 => {
                 let sk = ed25519_dalek::SecretKey::from_bytes(secret)
                     .map_err(|_| VaultError::InvalidEd25519Secret)?;
                 let public = ed25519_dalek::PublicKey::from(&sk);
-                Some(
-                    self.compute_key_id_for_public_key(&PublicKey::new(
-                        public.as_bytes().to_vec(),
-                        SecretType::Ed25519,
-                    ))
-                    .await?,
-                )
+                Some(self.compute_key_id_for_public_key_sync(&PublicKey::new(
+                    public.as_bytes().to_vec(),
+                    SecretType::Ed25519,
+                ))?)
             }
             #[cfg(feature = "bls")]
             SecretType::Bls => {
@@ -61,14 +55,14 @@ impl SoftwareVault {
                     BlsPublicKey::from(&bls_secret_key).to_bytes().into(),
                     SecretType::Bls,
                 );
-                Some(self.compute_key_id_for_public_key(&public_key).await?)
+                Some(self.compute_key_id_for_public_key_sync(&public_key)?)
             }
             SecretType::Buffer | SecretType::Aes => None,
         })
     }
 
     /// Validate secret key.
-    pub fn check_secret(&mut self, secret: &[u8], attributes: &SecretAttributes) -> Result<()> {
+    pub fn check_secret(&self, secret: &[u8], attributes: &SecretAttributes) -> Result<()> {
         match attributes.stype() {
             #[cfg(feature = "bls")]
             SecretType::Bls => {
@@ -87,12 +81,9 @@ impl SoftwareVault {
         }
         Ok(())
     }
-}
 
-#[async_trait]
-impl SecretVault for SoftwareVault {
     /// Generate fresh secret. Only Curve25519 and Buffer types are supported
-    async fn secret_generate(&mut self, attributes: SecretAttributes) -> Result<Secret> {
+    pub fn secret_generate_sync(&self, attributes: SecretAttributes) -> Result<Secret> {
         let key = match attributes.stype() {
             SecretType::X25519 | SecretType::Ed25519 => {
                 let bytes = {
@@ -143,47 +134,44 @@ impl SecretVault for SoftwareVault {
                 SecretKey::new(bls_secret_key.to_bytes().to_vec())
             }
         };
-        let key_id = self.compute_key_id(key.as_ref(), &attributes).await?;
-        self.next_id += 1;
-        self.entries
-            .insert(self.next_id, VaultEntry::new(key_id, attributes, key));
-
-        Ok(Secret::new(self.next_id))
+        let key_id = self.compute_key_id_sync(key.as_ref(), &attributes)?;
+        let secret = self.insert(VaultEntry::new(key_id, attributes, key));
+        Ok(secret)
     }
 
-    async fn secret_import(
-        &mut self,
+    /// Import a secret with given attributes from binary form into the vault
+    pub fn secret_import_sync(
+        &self,
         secret: &[u8],
         attributes: SecretAttributes,
     ) -> Result<Secret> {
         self.check_secret(secret, &attributes)?;
-        let key_id_opt = self.compute_key_id(secret, &attributes).await?;
-        self.next_id += 1;
-        self.entries.insert(
-            self.next_id,
-            VaultEntry::new(key_id_opt, attributes, SecretKey::new(secret.to_vec())),
-        );
-        Ok(Secret::new(self.next_id))
+        let key_id_opt = self.compute_key_id_sync(secret, &attributes)?;
+        let entry = VaultEntry::new(key_id_opt, attributes, SecretKey::new(secret.to_vec()));
+        let secret = self.insert(entry);
+        Ok(secret)
     }
 
-    async fn secret_export(&mut self, context: &Secret) -> Result<SecretKey> {
-        self.get_entry(context).map(|i| i.key().clone())
+    pub fn secret_export_sync(&self, context: &Secret) -> Result<SecretKey> {
+        Ok(self.with_entry(context, |i| i.key().clone())?)
     }
 
-    async fn secret_attributes_get(&mut self, context: &Secret) -> Result<SecretAttributes> {
-        self.get_entry(context).map(|i| i.key_attributes())
+    /// Get the attributes for a secret
+    pub fn secret_attributes_get_sync(&self, context: &Secret) -> Result<SecretAttributes> {
+        Ok(self.with_entry(context, |i| i.key_attributes())?)
     }
 
     /// Extract public key from secret. Only Curve25519 type is supported
-    async fn secret_public_key_get(&mut self, context: &Secret) -> Result<PublicKey> {
-        let entry = self.get_entry(context)?;
+    pub fn secret_public_key_get_sync(&self, context: &Secret) -> Result<PublicKey> {
+        let entries = self.inner.read();
+        let entry = entries.get_entry(context)?;
+
+        if entry.key().as_ref().len() != CURVE25519_SECRET_LENGTH {
+            return Err(VaultError::InvalidPrivateKeyLen.into());
+        }
 
         match entry.key_attributes().stype() {
             SecretType::X25519 => {
-                if entry.key().as_ref().len() != CURVE25519_SECRET_LENGTH {
-                    return Err(VaultError::InvalidPrivateKeyLen.into());
-                }
-
                 let sk = x25519_dalek::StaticSecret::from(*array_ref![
                     entry.key().as_ref(),
                     0,
@@ -218,11 +206,41 @@ impl SecretVault for SoftwareVault {
     }
 
     /// Remove secret from memory
-    async fn secret_destroy(&mut self, context: Secret) -> Result<()> {
-        match self.entries.remove(&context.index()) {
+    pub fn secret_destroy_sync(&self, context: Secret) -> Result<()> {
+        match self.remove(context) {
             None => Err(VaultError::EntryNotFound.into()),
             Some(_) => Ok(()),
         }
+    }
+}
+
+#[async_trait]
+impl SecretVault for SoftwareVault {
+    /// Generate fresh secret. Only Curve25519 and Buffer types are supported
+    async fn secret_generate(&self, attributes: SecretAttributes) -> Result<Secret> {
+        self.secret_generate_sync(attributes)
+    }
+
+    async fn secret_import(&self, secret: &[u8], attributes: SecretAttributes) -> Result<Secret> {
+        self.secret_import_sync(secret, attributes)
+    }
+
+    async fn secret_export(&self, context: &Secret) -> Result<SecretKey> {
+        self.secret_export_sync(context)
+    }
+
+    async fn secret_attributes_get(&self, context: &Secret) -> Result<SecretAttributes> {
+        self.secret_attributes_get_sync(context)
+    }
+
+    /// Extract public key from secret. Only Curve25519 type is supported
+    async fn secret_public_key_get(&self, context: &Secret) -> Result<PublicKey> {
+        self.secret_public_key_get_sync(context)
+    }
+
+    /// Remove secret from memory
+    async fn secret_destroy(&self, context: Secret) -> Result<()> {
+        self.secret_destroy_sync(context)
     }
 }
 

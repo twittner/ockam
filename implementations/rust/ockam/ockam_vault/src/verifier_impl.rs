@@ -4,11 +4,10 @@ use ockam_core::vault::{PublicKey, SecretType, Signature, Verifier, CURVE25519_P
 use ockam_core::Result;
 use ockam_core::{async_trait, compat::boxed::Box};
 
-#[async_trait]
-impl Verifier for SoftwareVault {
+impl SoftwareVault {
     /// Verify signature
-    async fn verify(
-        &mut self,
+    pub fn verify_sync(
+        &self,
         signature: &Signature,
         public_key: &PublicKey,
         data: &[u8],
@@ -67,5 +66,18 @@ impl Verifier for SoftwareVault {
             }
             SecretType::Buffer | SecretType::Aes => Err(VaultError::InvalidPublicKey.into()),
         }
+    }
+}
+
+#[async_trait]
+impl Verifier for SoftwareVault {
+    /// Verify signature
+    async fn verify(
+        &self,
+        signature: &Signature,
+        public_key: &PublicKey,
+        data: &[u8],
+    ) -> Result<bool> {
+        self.verify_sync(signature, public_key, data)
     }
 }

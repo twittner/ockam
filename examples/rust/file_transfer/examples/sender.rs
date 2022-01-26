@@ -4,12 +4,13 @@ use file_transfer::{FileData, FileDescription};
 use ockam::{route, Context, Entity, TrustEveryonePolicy, Vault};
 use ockam::{TcpTransport, TCP};
 
-use std::path::PathBuf;
-
 use anyhow::Result;
+use std::path::PathBuf;
 use structopt::StructOpt;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
+
+use tracing::Instrument;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "sender", about = "An example of file transfer implemented with ockam.")]
@@ -59,31 +60,43 @@ async fn main(ctx: Context) -> Result<()> {
     println!("\n[✓] End-to-end encrypted secure channel was established.\n");
 
     // Open file, send name and size to Receiver then send chunk of files.
+    tracing::info!("opening file");
     let mut file = File::open(&opt.input).await?;
     let metadata = file.metadata().await?;
     if !metadata.is_file() {
         anyhow::bail!("Can only transfer a file")
     }
+    tracing::info!("opened file");
 
     // Can safely unwrap the first time because we're sure we have a file because we opened it above
     //     and `file_name` returns None when the path ends with `..` which can't be a file
     // Can safely unwrap the second time because the path came from a String from the command line and thus should be a valid UTF8
     let filename = opt.input.file_name().unwrap().to_str().unwrap().to_owned();
+    let file_len: usize = metadata.len().try_into().unwrap();
     let descr = FileData::Description(FileDescription {
         name: filename,
-        size: metadata.len() as usize,
+        size: file_len,
     });
 
+    tracing::info!("sending descr");
     ctx.send(route![channel.clone(), "receiver"], descr).await?;
 
-    let mut buffer = vec![0u8; opt.chunk_size];
-    loop {
-        if let Ok(count) = file.read(&mut buffer).await {
+    tracing::info!("sent descr");
+    let mut buffer = vec![0; opt.chunk_size.min(file_len)];
+
+    for n in 0usize.. {
+        tracing::info!("about to read chunk {}", n);
+        if let Ok(count) = file.read(&mut buffer[..]).await {
+            tracing::info!("chunk {}: read {} bytes", n, count);
             if count == 0 {
+                tracing::info!("done after {} chunks!", n);
                 break;
             }
             let data = FileData::Data(buffer[..count].to_vec());
-            ctx.send(route![channel.clone(), "receiver"], data).await?;
+            let span = tracing::span!(tracing::Level::TRACE, "send", chunk_num = n);
+            ctx.send(route![channel.clone(), "receiver"], data)
+                .instrument(span)
+                .await?;
         }
     }
 

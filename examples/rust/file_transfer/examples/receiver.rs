@@ -25,6 +25,7 @@ impl Worker for FileReception {
     async fn handle_message(&mut self, ctx: &mut Context, msg: Routed<Self::Message>) -> Result<()> {
         match msg.as_body() {
             FileData::Description(desc) => {
+                tracing::info!("got description: {:?}", desc);
                 self.name = desc.name.clone();
                 self.size = desc.size;
                 self.file = Some(
@@ -37,6 +38,7 @@ impl Worker for FileReception {
                 )
             }
             FileData::Data(data) => {
+                tracing::info!("got data: {:?}", bstr::ByteSlice::as_bstr(&data[..]));
                 if self.written_size + data.len() > self.size {
                     return Err(ockam::Error::new(
                         0,
@@ -71,7 +73,10 @@ impl Worker for FileReception {
                     return Err(ockam::Error::new(0, "File not opened"));
                 }
             }
-            FileData::Quit => ctx.stop().await?,
+            FileData::Quit => {
+                tracing::info!("done");
+                ctx.stop().await?;
+            }
         }
 
         Ok(())

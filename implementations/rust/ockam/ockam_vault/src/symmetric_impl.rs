@@ -8,7 +8,7 @@ use ockam_core::Result;
 use ockam_core::{async_trait, compat::boxed::Box};
 
 macro_rules! encrypt_op_impl {
-    ($a:expr,$aad:expr,$nonce:expr,$text:expr,$type:ident,$op:ident) => {{
+    ($a:expr, $aad:expr, $nonce:expr, $text:expr, $type:ident, $op:ident) => {{
         let key = GenericArray::from_slice($a.as_ref());
         let cipher = $type::new(key);
         let nonce = GenericArray::from_slice($nonce.as_ref());
@@ -42,17 +42,17 @@ macro_rules! encrypt_impl {
     }};
 }
 
-#[async_trait]
-impl SymmetricVault for SoftwareVault {
-    async fn aead_aes_gcm_encrypt(
-        &mut self,
+impl SoftwareVault {
+    /// Synchronous equivalent to Encrypt a payload using AES-GCM
+    pub fn aead_aes_gcm_encrypt_sync(
+        &self,
         context: &Secret,
         plaintext: &[u8],
         nonce: &[u8],
         aad: &[u8],
     ) -> Result<Buffer<u8>> {
-        let entry = self.get_entry(context)?;
-
+        let storage = self.inner.read();
+        let entry = storage.get_entry(context)?;
         encrypt_impl!(
             entry,
             aad,
@@ -63,14 +63,15 @@ impl SymmetricVault for SoftwareVault {
         )
     }
 
-    async fn aead_aes_gcm_decrypt(
-        &mut self,
+    pub fn aead_aes_gcm_decrypt_sync(
+        &self,
         context: &Secret,
         cipher_text: &[u8],
         nonce: &[u8],
         aad: &[u8],
     ) -> Result<Buffer<u8>> {
-        let entry = self.get_entry(context)?;
+        let storage = self.inner.read();
+        let entry = storage.get_entry(context)?;
 
         encrypt_impl!(
             entry,
@@ -80,6 +81,31 @@ impl SymmetricVault for SoftwareVault {
             decrypt,
             VaultError::AeadAesGcmDecrypt
         )
+    }
+}
+
+#[async_trait]
+impl SymmetricVault for SoftwareVault {
+    #[inline]
+    async fn aead_aes_gcm_encrypt(
+        &self,
+        context: &Secret,
+        plaintext: &[u8],
+        nonce: &[u8],
+        aad: &[u8],
+    ) -> Result<Buffer<u8>> {
+        self.aead_aes_gcm_encrypt_sync(context, plaintext, nonce, aad)
+    }
+
+    #[inline]
+    async fn aead_aes_gcm_decrypt(
+        &self,
+        context: &Secret,
+        cipher_text: &[u8],
+        nonce: &[u8],
+        aad: &[u8],
+    ) -> Result<Buffer<u8>> {
+        self.aead_aes_gcm_decrypt_sync(context, cipher_text, nonce, aad)
     }
 }
 

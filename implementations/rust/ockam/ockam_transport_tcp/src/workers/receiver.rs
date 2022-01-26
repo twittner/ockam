@@ -68,9 +68,10 @@ impl Processor for TcpRecvProcessor {
             }
         }
 
+        dbg!(ockam_core::hex::encode(&buf[..]));
         // Deserialize the message now
         let mut msg = TransportMessage::decode(&buf).map_err(|_| TransportError::RecvBadMessage)?;
-
+        dbg!(&msg);
         // Heartbeat message
         if msg.onward_route.next().is_err() {
             trace!("Got heartbeat message from: {}", self.peer_addr);

@@ -4,11 +4,11 @@ use ockam_core::vault::{Secret, SecretType, Signature, Signer};
 use ockam_core::Result;
 use ockam_core::{async_trait, compat::boxed::Box};
 
-#[async_trait]
-impl Signer for SoftwareVault {
+impl SoftwareVault {
     /// Sign data with xeddsa algorithm. Only curve25519 is supported.
-    async fn sign(&mut self, secret_key: &Secret, data: &[u8]) -> Result<Signature> {
-        let entry = self.get_entry(secret_key)?;
+    pub fn sign_sync(&self, secret_key: &Secret, data: &[u8]) -> Result<Signature> {
+        let storage = self.inner.read();
+        let entry = storage.get_entry(secret_key)?;
         let key = entry.key().as_ref();
         match entry.key_attributes().stype() {
             SecretType::X25519 => {
@@ -60,6 +60,14 @@ impl Signer for SoftwareVault {
             }
             SecretType::Buffer | SecretType::Aes => Err(VaultError::InvalidKeyType.into()),
         }
+    }
+}
+
+#[async_trait]
+impl Signer for SoftwareVault {
+    /// Sign data with xeddsa algorithm. Only curve25519 is supported.
+    async fn sign(&self, secret_key: &Secret, data: &[u8]) -> Result<Signature> {
+        self.sign_sync(secret_key, data)
     }
 }
 

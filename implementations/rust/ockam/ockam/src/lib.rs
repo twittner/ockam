@@ -61,6 +61,7 @@ pub use unique::*;
 
 pub mod channel;
 pub mod pipe;
+pub mod pipe2;
 pub mod stream;
 
 pub use ockam_core::{

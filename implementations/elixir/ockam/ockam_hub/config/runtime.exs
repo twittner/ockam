@@ -178,7 +178,9 @@ config :ockam_hub,
     # token lease services
     Ockam.TokenLeaseManager.Hub.Service.Provider,
     # secure channel services
-    Ockam.Hub.Service.Provider.SecureChannel
+    Ockam.Hub.Service.Provider.SecureChannel,
+    # discovery service
+    Ockam.Hub.Service.Provider.Discovery
   ],
   services_config_source: services_config_source,
   # JSON version of the services definition
@@ -187,9 +189,10 @@ config :ockam_hub,
   services_list: services_list,
   ## Start echo and forwarding services by default
   services: [
+    :discovery,
     :echo,
     :forwarding,
-    :pub_sub,
+    # :pub_sub,
     :stream,
     :stream_index,
     :secure_channel,

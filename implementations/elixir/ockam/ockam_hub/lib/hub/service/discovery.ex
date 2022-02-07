@@ -1,3 +1,17 @@
+
+defmodule Ockam.Hub.Service.Discovery.ServiceInfo do
+  @moduledoc """
+  Service info structure for discovery service.
+  """
+  defstruct [:id, :route, metadata: %{}]
+
+  @type t() :: %__MODULE__{
+          id: binary(),
+          route: [Ockam.Address.t()],
+          metadata: %{binary() => binary()}
+        }
+end
+
 defmodule Ockam.Hub.Service.Discovery do
   @moduledoc """
   Discovery service storing information about other services
@@ -9,10 +23,17 @@ defmodule Ockam.Hub.Service.Discovery do
   use Ockam.Worker
 
   alias Ockam.Bare.Extended, as: BareExtended
+  alias Ockam.Hub.Service.Discovery.ServiceInfo
   alias Ockam.Message
   alias Ockam.Router
 
   require Logger
+
+  def register_service(registry_route, id, route, metadata \\ %{}) do
+    Logger.info("Registering #{inspect(id)}, #{inspect(route)} #{inspect(metadata)}")
+    payload = encode_register_request(id, metadata)
+    Router.route(payload, registry_route, route)
+  end
 
   @impl true
   def setup(options, state) do
@@ -32,7 +53,14 @@ defmodule Ockam.Hub.Service.Discovery do
           get(id, state)
 
         {:register, id, route, metadata} ->
-          register(id, route, metadata, state)
+          ## Don't reply to register request
+          ## TODO: register API with replies
+          case register(id, route, metadata, state) do
+            {:ok, state} ->
+              {:noreply, state}
+            other ->
+              other
+          end
 
         other ->
           Logger.warn(
@@ -73,21 +101,24 @@ defmodule Ockam.Hub.Service.Discovery do
     payload = Message.payload(message)
 
     case payload do
-      "" ->
-        :list
-
-      _other ->
+      <<0>> <> request_v0 ->
         ## TODO: better way to encode request data??
-        case BareExtended.decode(payload, request_schema()) do
+        case BareExtended.decode(request_v0, request_schema()) do
+          {:ok, {:list, ""}} ->
+            :list
           {:ok, {:get, id}} ->
             {:get, id}
 
-          {:ok, {:register, %{id: id, route: route, metadata: metadata}}} ->
-            {:register, id, route, metadata}
+          {:ok, {:register, %{id: id, metadata: metadata}}} ->
+            ## Using message return route as a route in register request.
+            ## TODO: remove route from request to only use the traced return route?
+            {:register, id, Message.return_route(message), metadata}
 
           other ->
             other
         end
+      other ->
+        {:error, {:invalid_request_version, other}}
     end
   end
 
@@ -102,30 +133,46 @@ defmodule Ockam.Hub.Service.Discovery do
 
   def format_reply(reply) do
     ## TODO: maybe use better distinction between results (request id/function?)
-    case reply do
+    formatted = case reply do
       {:ok, service_info} ->
         :bare.encode(service_info, service_info_schema())
 
-      [{:service_info, _, _, _} | _] = list ->
+      [] ->
+        :bare.encode([], {:array, service_info_schema()})
+      [%ServiceInfo{} | _] = list ->
         :bare.encode(list, {:array, service_info_schema()})
 
       :ok ->
+        ## TODO: meaningful response for registration
         ""
 
       {:error, _reason} ->
         ## TODO: error encoding
         ""
     end
+    <<0>> <> formatted
   end
 
   ## BARE schemas
+
   def request_schema() do
-    [
-      get: :string,
-      register: service_info_schema()
-    ]
+   [
+     list: {:data, 0},
+     get: :string,
+     register: {:struct, [id: :string, metadata: {:map, :string, :data}]}
+   ]
   end
 
+  def register_schema() do
+    {:struct, [id: :string, metadata: {:map, :string, :data}]}
+  end
+
+  def encode_register_request(id, metadata) do
+    <<0>> <> BareExtended.encode({:register, %{id: id, metadata: metadata}}, request_schema())
+  end
+
+  ## To be used with this schema, routes should be normalized to (type, value) maps
+  ## TODO: improve encode/decode logic to work with other address formats
   def service_info_schema() do
     {:struct,
      [
@@ -134,19 +181,6 @@ defmodule Ockam.Hub.Service.Discovery do
        metadata: {:map, :string, :data}
      ]}
   end
-end
-
-defmodule Ockam.Hub.Service.Discovery.ServiceInfo do
-  @moduledoc """
-  Service info structure for discovery service.
-  """
-  defstruct [:id, :route, metadata: %{}]
-
-  @type t() :: %__MODULE__{
-          id: binary(),
-          route: [Ockam.Address.t()],
-          metadata: %{binary() => binary()}
-        }
 end
 
 defmodule Ockam.Hub.Service.Discovery.Storage do

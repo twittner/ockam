@@ -9,6 +9,8 @@ defmodule Ockam.Hub.Service.Provider do
   with :ockam_hub => :providers provider implementations
   """
 
+  alias Ockam.Hub.Service.Discovery, as: ServiceDiscovery
+
   require Logger
 
   @type child_spec :: Supervisor.child_spec() | {module(), term()} | module()
@@ -18,6 +20,10 @@ defmodule Ockam.Hub.Service.Provider do
 
   @callback start_service(name :: atom(), args :: Keyword.t()) :: {:ok, address :: String.t()}
   @callback child_spec(name :: atom(), args :: Keyword.t()) :: child_spec()
+
+  @supervisor Ockam.Hub
+  ## TODO: make this configurable/retrievable
+  @discovery_service_route ["discovery"]
 
   @spec start_configured_services() :: :ok | {:error, any()}
   def start_configured_services() do
@@ -98,9 +104,7 @@ defmodule Ockam.Hub.Service.Provider do
         {:error, {:unknown_service, service_name}}
 
       provider_mod ->
-        child_spec = provider_mod.child_spec(service_name, service_args)
-
-        {:ok, Supervisor.child_spec(child_spec, id: service_name)}
+        {:ok, service_child_spec(provider_mod, service_name, service_args)}
     end
   end
 
@@ -136,13 +140,57 @@ defmodule Ockam.Hub.Service.Provider do
     end
   end
 
+  def service_child_spec(provider_mod, service_name, service_args) do
+    provider_mod.child_spec(service_name, service_args)
+    |> Supervisor.child_spec(id: service_name)
+    |> extend_child_spec()
+  end
+
+  def extend_child_spec(child_spec) do
+    id = child_spec[:id]
+    start = child_spec[:start]
+    Map.put(child_spec, :start, {__MODULE__, :start_registered_service, [id, start]})
+  end
+
   def do_start_service({service_name, service_args}, service_providers_map) do
     case Map.get(service_providers_map, service_name) do
       nil ->
         {:error, :unknown_service}
 
       provider_mod ->
-        provider_mod.start_service(service_name, service_args)
+        service_child_spec(provider_mod, service_name, service_args)
+        |> start_child()
+    end
+  end
+
+  def start_child(child_spec) do
+    Supervisor.start_child(@supervisor, child_spec)
+  end
+
+  def start_registered_service(id, {m, f, a}) do
+    case apply(m, f, a) do
+      {:ok, pid} ->
+        ## TODO: handle errors
+        register_service(id, pid)
+        {:ok, pid}
+      {:ok, pid, info} ->
+        ## TODO: handle errors
+        register_service(id, pid)
+        {:ok, pid, info}
+      other ->
+        Logger.info("Other: #{inspect(other)}")
+        other
+    end
+  end
+
+  def register_service(id, pid) do
+    name = to_string(id)
+    case :sys.get_state(pid) do
+      %{address: address} ->
+        ServiceDiscovery.register_service(@discovery_service_route, name, [address])
+      _ ->
+        Logger.warn("No address registered for service worker: #{inspect({id, pid})}")
+        {:error, :no_address}
     end
   end
 

@@ -16,13 +16,7 @@ defmodule Ockam.Hub.Service.Provider.Discovery do
   end
 
   @impl true
-  def start_service(:discovery, args) do
-    DiscoveryService.create(Keyword.merge([address: "discovery"], args))
-  end
-
-  @impl true
   def child_spec(:discovery, args) do
-    {DiscoveryService, Keyword.merge([address: "discovery"], args)}
+    {DiscoveryService, Keyword.merge([address: "discovery_service"], args)}
   end
 end
-

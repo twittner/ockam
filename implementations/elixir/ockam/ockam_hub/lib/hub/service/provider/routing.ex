@@ -19,24 +19,6 @@ defmodule Ockam.Hub.Service.Provider.Routing do
   end
 
   @impl true
-  def start_service(:echo, args) do
-    ## TODO: start services as permanent
-    EchoService.create(Keyword.merge([address: "echo_service"], args))
-  end
-
-  def start_service(:forwarding, args) do
-    ForwardingService.create(Keyword.merge([address: "forwarding_service"], args))
-  end
-
-  def start_service(:pub_sub, args) do
-    PubSubService.create(Keyword.merge([address: "pub_sub_service", prefix: "pub_sub_t"], args))
-  end
-
-  def start_service(:tracing, args) do
-    TracingService.create(Keyword.merge([address: "tracing_service"], args))
-  end
-
-  @impl true
   def child_spec(:echo, args) do
     {EchoService, Keyword.merge([address: "echo_service"], args)}
   end

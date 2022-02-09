@@ -1,4 +1,3 @@
-
 defmodule Ockam.Hub.Service.Discovery.ServiceInfo do
   @moduledoc """
   Service info structure for discovery service.
@@ -58,6 +57,7 @@ defmodule Ockam.Hub.Service.Discovery do
           case register(id, route, metadata, state) do
             {:ok, state} ->
               {:noreply, state}
+
             other ->
               other
           end
@@ -106,6 +106,7 @@ defmodule Ockam.Hub.Service.Discovery do
         case BareExtended.decode(request_v0, request_schema()) do
           {:ok, {:list, ""}} ->
             :list
+
           {:ok, {:get, id}} ->
             {:get, id}
 
@@ -117,6 +118,7 @@ defmodule Ockam.Hub.Service.Discovery do
           other ->
             other
         end
+
       other ->
         {:error, {:invalid_request_version, other}}
     end
@@ -133,42 +135,64 @@ defmodule Ockam.Hub.Service.Discovery do
 
   def format_reply(reply) do
     ## TODO: maybe use better distinction between results (request id/function?)
-    formatted = case reply do
-      {:ok, service_info} ->
-        :bare.encode(service_info, service_info_schema())
+    formatted =
+      case reply do
+        {:ok, service_info} ->
+          encode_service_info(service_info)
 
-      [] ->
-        :bare.encode([], {:array, service_info_schema()})
-      [%ServiceInfo{} | _] = list ->
-        :bare.encode(list, {:array, service_info_schema()})
+        [] ->
+          encode_service_infos([])
 
-      :ok ->
-        ## TODO: meaningful response for registration
-        ""
+        [%ServiceInfo{} | _] = list ->
+          Logger.info("List: #{inspect(list)}")
+          encode_service_infos(list)
 
-      {:error, _reason} ->
-        ## TODO: error encoding
-        ""
-    end
+        :ok ->
+          ## TODO: meaningful response for registration
+          ""
+
+        {:error, _reason} ->
+          ## TODO: error encoding
+          ""
+      end
+
     <<0>> <> formatted
   end
 
   ## BARE schemas
 
   def request_schema() do
-   [
-     list: {:data, 0},
-     get: :string,
-     register: {:struct, [id: :string, metadata: {:map, :string, :data}]}
-   ]
+    [
+      list: {:data, 0},
+      get: :string,
+      register: {:struct, [id: :string, metadata: {:map, :string, :data}]}
+    ]
   end
 
-  def register_schema() do
-    {:struct, [id: :string, metadata: {:map, :string, :data}]}
+  def encode_list_request() do
+    <<0>> <> BareExtended.encode({:list, ""}, request_schema())
   end
 
   def encode_register_request(id, metadata) do
     <<0>> <> BareExtended.encode({:register, %{id: id, metadata: metadata}}, request_schema())
+  end
+
+  ## TODO: come up with better API for encoding/decoding of routes
+  def encode_service_info(service_info) do
+    service_info = normalize_service_info(service_info)
+    :bare.encode(service_info, service_info_schema())
+  end
+
+  def encode_service_infos(service_infos) do
+    service_infos =
+      Enum.map(service_infos, fn service_info -> normalize_service_info(service_info) end)
+
+    :bare.encode(service_infos, {:array, service_info_schema()})
+  end
+
+  def normalize_service_info(%{route: route} = service_info) do
+    normalized_route = Enum.map(route, fn address -> Ockam.Address.normalize(address) end)
+    Map.put(service_info, :route, normalized_route)
   end
 
   ## To be used with this schema, routes should be normalized to (type, value) maps

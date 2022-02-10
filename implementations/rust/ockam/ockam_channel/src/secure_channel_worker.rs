@@ -2,6 +2,7 @@ use crate::{
     CreateResponderChannelMessage, SecureChannelError, SecureChannelKeyExchanger,
     SecureChannelLocalInfo, SecureChannelVault,
 };
+use minicbor::{bytes::ByteVec, Encode, Decode};
 use ockam_core::async_trait;
 use ockam_core::compat::{boxed::Box, string::String, vec::Vec};
 use ockam_core::vault::Secret;
@@ -10,7 +11,6 @@ use ockam_core::{
     TransportMessage, Worker,
 };
 use ockam_node::Context;
-use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
 pub(crate) struct ChannelKeys {
@@ -127,14 +127,14 @@ impl<V: SecureChannelVault, K: SecureChannelKeyExchanger> SecureChannelWorker<V,
         let reply = msg.return_route();
         let mut onward_route = msg.onward_route();
         let transport_message = msg.into_transport_message();
-        let payload = transport_message.payload;
+        let payload = transport_message.payload();
 
         let _ = onward_route.step();
 
         let msg = TransportMessage::v1(onward_route, reply, payload.to_vec());
-        let payload = msg.encode()?;
+        let payload = Encodable::encode(&msg)?;
 
-        let payload = {
+        let payload: ByteVec = {
             let keys = Self::get_keys(&mut self.keys)?;
 
             let nonce = keys.nonce;
@@ -156,7 +156,7 @@ impl<V: SecureChannelVault, K: SecureChannelKeyExchanger> SecureChannelWorker<V,
             res.extend_from_slice(&small_nonce);
             res.append(&mut cipher_text);
 
-            res
+            res.into()
         };
 
         ctx.send_from_address(
@@ -175,8 +175,8 @@ impl<V: SecureChannelVault, K: SecureChannelKeyExchanger> SecureChannelWorker<V,
         debug!("SecureChannel received Decrypt");
 
         let transport_message = msg.into_transport_message();
-        let payload = transport_message.payload;
-        let payload = Vec::<u8>::decode(&payload)?;
+        let payload = transport_message.payload();
+        let payload: ByteVec = Decodable::decode(&payload)?;
 
         let payload = {
             let keys = Self::get_keys(&mut self.keys)?;
@@ -192,7 +192,7 @@ impl<V: SecureChannelVault, K: SecureChannelKeyExchanger> SecureChannelWorker<V,
                 .await?
         };
 
-        let mut transport_message = TransportMessage::decode(&payload)?;
+        let mut transport_message: TransportMessage = Decodable::decode(&payload)?;
 
         transport_message
             .return_route
@@ -216,8 +216,8 @@ impl<V: SecureChannelVault, K: SecureChannelKeyExchanger> SecureChannelWorker<V,
 
         let reply = msg.return_route();
         let transport_message = msg.into_transport_message();
-        let payload = transport_message.payload;
-        let payload = Vec::<u8>::decode(&payload)?;
+        let payload = transport_message.payload();
+        let payload: Vec<u8> = Decodable::decode(&payload)?;
 
         // Update route to a remote
         self.remote_route = reply;
@@ -286,9 +286,11 @@ impl<V: SecureChannelVault, K: SecureChannelKeyExchanger> SecureChannelWorker<V,
 }
 
 /// Key Exchange completed message
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Message)]
+#[derive(Encode, Decode, Clone, PartialEq, Debug, Message)]
 pub struct KeyExchangeCompleted {
+    #[n(0)]
     address: Address,
+    #[cbor(n(1), with = "minicbor::bytes")]
     auth_hash: [u8; 32],
 }
 

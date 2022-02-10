@@ -1,7 +1,7 @@
 use ockam_core::compat::vec::Vec;
 use ockam_core::vault::PublicKey;
 use ockam_core::Result;
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 pub use crate::signature::*;
 use crate::{CreateKeyChange, EventIdentifier, IdentityEventAttributes, RotateKeyChange};
@@ -18,12 +18,13 @@ impl IdentityEventAttributeKey {
 }
 
 /// Individual change applied to identity. [`IdentityChangeEvent`] consists of one or more such changes
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct IdentityChange {
-    version: u8,
+    #[n(0)] version: u8,
     // TODO: Check attributes serialization
+    #[cbor(n(1), with = "ockam_core::hashbrown_cbor")]
     attributes: IdentityEventAttributes,
-    change_type: IdentityChangeType,
+    #[n(2)] change_type: IdentityChangeType,
 }
 
 impl IdentityChange {
@@ -75,19 +76,19 @@ impl IdentityChange {
 }
 
 /// Possible types of [`crate::Identity`] changes
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub enum IdentityChangeType {
     /// Create key
-    CreateKey(CreateKeyChange),
+    #[n(0)] CreateKey(#[n(0)] CreateKeyChange),
     /// Rotate key
-    RotateKey(RotateKeyChange),
+    #[n(1)] RotateKey(#[n(1)] RotateKeyChange),
 }
 
 /// Identity changes with a given event identifier
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct ChangeBlock {
-    change: IdentityChange,
-    prev_event_id: EventIdentifier,
+    #[n(0)] change: IdentityChange,
+    #[n(1)] prev_event_id: EventIdentifier,
 }
 
 impl ChangeBlock {
@@ -114,11 +115,11 @@ impl ChangeBlock {
 /// [`crate::Identity`]s are modified using change events mechanism. One event may have 1 or more [`IdentityChange`]s
 /// Proof is used to check whether this event comes from a party authorized to perform such updated
 /// Individual changes may include additional proofs, if needed
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode)]
 pub struct IdentityChangeEvent {
-    identifier: EventIdentifier,
-    change_block: ChangeBlock,
-    signatures: Vec<Signature>,
+    #[n(0)] identifier: EventIdentifier,
+    #[n(1)] change_block: ChangeBlock,
+    #[n(2)] signatures: Vec<Signature>,
 }
 
 pub type Changes = Vec<IdentityChangeEvent>;

@@ -4,32 +4,22 @@ pub mod internal;
 
 use crate::Message;
 use ockam_core::compat::vec::Vec;
-use ockam_core::{Decodable, Encodable, Result, TransportMessage, Uint};
-use serde::{Deserialize, Serialize};
+use ockam_core::{Decodable, Encodable, Result, TransportMessage};
+use minicbor::{Encode, Decode};
 
 /// An indexed message for pipes
-#[derive(Serialize, Deserialize, Message)]
+#[derive(Encode, Decode, Clone, Message, Debug)]
 pub struct PipeMessage {
     /// Pipe message index
-    pub index: Uint,
+    #[n(0)] pub index: u64,
     /// Pipe message raw data
+    #[cbor(n(1), with = "minicbor::bytes")]
     pub data: Vec<u8>,
-}
-
-/// We need to manually implement clone because serde_bare::Uint
-/// doesn't, so we can't derive it
-impl Clone for PipeMessage {
-    fn clone(&self) -> Self {
-        Self {
-            index: Uint::from(self.index.u64()),
-            data: self.data.clone(),
-        }
-    }
 }
 
 impl PipeMessage {
     pub(crate) fn from_transport(index: u64, msg: TransportMessage) -> Result<Self> {
-        let data = msg.encode()?;
+        let data = Encodable::encode(&msg)?;
         Ok(Self {
             index: index.into(),
             data,
@@ -37,6 +27,6 @@ impl PipeMessage {
     }
 
     pub(crate) fn to_transport(&self) -> Result<TransportMessage> {
-        TransportMessage::decode(&self.data)
+        Decodable::decode(&self.data)
     }
 }

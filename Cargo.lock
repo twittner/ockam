@@ -680,6 +680,7 @@ name = "file_transfer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "minicbor",
  "ockam",
  "serde 1.0.136",
  "structopt",
@@ -869,6 +870,12 @@ dependencies = [
  "rand_core 0.6.3",
  "subtle",
 ]
+
+[[package]]
+name = "half"
+version = "1.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
 
 [[package]]
 name = "hash32"
@@ -1182,6 +1189,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "minicbor"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "124d887cb82f0b1469bdac3d1b65764a381eed1a54fdab0070e5772b13114521"
+dependencies = [
+ "half",
+ "minicbor-derive",
+]
+
+[[package]]
+name = "minicbor-derive"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58f79d5d3fb4f93c77ef7b97065fb65efe6abe670795ad8bc5be9c0e12005290"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "miniz_oxide"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1312,6 +1340,7 @@ dependencies = [
  "bls12_381_plus",
  "dyn-clone",
  "hex",
+ "minicbor",
  "ockam_channel",
  "ockam_core",
  "ockam_identity",
@@ -1350,6 +1379,7 @@ dependencies = [
 name = "ockam_channel"
 version = "0.42.0"
 dependencies = [
+ "minicbor",
  "ockam_core",
  "ockam_key_exchange_core",
  "ockam_key_exchange_x3dh",
@@ -1400,11 +1430,11 @@ dependencies = [
  "hashbrown 0.11.2",
  "heapless",
  "hex",
+ "minicbor",
  "ockam_macros",
  "rand 0.8.4",
  "rand_pcg",
  "serde 1.0.136",
- "serde_bare",
  "spin",
  "zeroize",
 ]
@@ -1438,6 +1468,7 @@ dependencies = [
  "cfg-if",
  "group",
  "heapless",
+ "minicbor",
  "ockam_channel",
  "ockam_core",
  "ockam_key_exchange_core",
@@ -1513,6 +1544,7 @@ name = "ockam_node"
 version = "0.45.0"
 dependencies = [
  "heapless",
+ "minicbor",
  "ockam_core",
  "ockam_executor",
  "ockam_macros",
@@ -1535,6 +1567,7 @@ version = "0.41.0"
 dependencies = [
  "futures 0.3.19",
  "hashbrown 0.9.1",
+ "minicbor",
  "ockam_core",
  "ockam_macros",
  "ockam_node",
@@ -2048,15 +2081,6 @@ dependencies = [
  "num-traits 0.1.43",
  "regex",
  "serde 0.8.23",
-]
-
-[[package]]
-name = "serde_bare"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51c55386eed0f1ae957b091dc2ca8122f287b60c79c774cbe3d5f2b69fded660"
-dependencies = [
- "serde 1.0.136",
 ]
 
 [[package]]

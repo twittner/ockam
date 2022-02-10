@@ -7,11 +7,11 @@ use core::fmt::{self, Debug, Display};
 use core::iter::FromIterator;
 use core::ops::Deref;
 use core::str::from_utf8;
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 /// A collection of Addresses
-#[derive(Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
-pub struct AddressSet(Vec<Address>);
+#[derive(Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Encode, Decode)]
+pub struct AddressSet(#[n(0)] Vec<Address>);
 
 impl AddressSet {
     /// Retrieve the set's iterator.
@@ -97,10 +97,12 @@ impl<'a> From<&'a str> for AddressSet {
 /// string, the first `#` symbol is used to separate the type from the
 /// rest of the address.  If no `#` symbol is found, the address is
 /// assumed to be of `tt = 0` (local worker).
-#[derive(Serialize, Deserialize, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Address {
     /// The address type
+    #[n(0)]
     pub tt: u8,
+    #[cbor(n(1), with = "minicbor::bytes")]
     inner: Vec<u8>,
 }
 /// An error which is returned when address parsing from string fails

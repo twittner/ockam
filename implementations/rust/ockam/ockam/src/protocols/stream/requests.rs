@@ -3,13 +3,12 @@
 use crate::protocols::ProtocolPayload;
 use crate::Message;
 use ockam_core::compat::{string::String, vec::Vec};
-use ockam_core::Uint;
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 /// Request a new mailbox to be created
-#[derive(Debug, PartialEq, Serialize, Deserialize, Message)]
+#[derive(Debug, PartialEq, Encode, Decode, Message)]
 pub struct CreateStreamRequest {
-    pub stream_name: Option<String>,
+    #[n(0)] pub stream_name: Option<String>,
 }
 
 impl CreateStreamRequest {
@@ -26,10 +25,10 @@ impl CreateStreamRequest {
 }
 
 /// Push a message into the mailbox
-#[derive(Debug, PartialEq, Serialize, Deserialize, Message)]
+#[derive(Debug, PartialEq, Encode, Decode, Message)]
 pub struct PushRequest {
-    pub request_id: Uint, // uint
-    pub data: Vec<u8>,
+    #[n(0)] pub request_id: u64,
+    #[cbor(n(1), with = "minicbor::bytes")] pub data: Vec<u8>,
 }
 
 impl PushRequest {
@@ -39,7 +38,7 @@ impl PushRequest {
         ProtocolPayload::new(
             "stream_push",
             Self {
-                request_id: request_id.into(),
+                request_id,
                 data: data.into(),
             },
         )
@@ -47,11 +46,11 @@ impl PushRequest {
 }
 
 /// Pull messages from the mailbox
-#[derive(Debug, PartialEq, Serialize, Deserialize, Message)]
+#[derive(Debug, PartialEq, Encode, Decode, Message)]
 pub struct PullRequest {
-    pub request_id: Uint,
-    pub index: Uint,
-    pub limit: Uint,
+    #[n(0)] pub request_id: u64,
+    #[n(1)] pub index: u64,
+    #[n(2)] pub limit: u64,
 }
 
 impl PullRequest {
@@ -70,16 +69,16 @@ impl PullRequest {
 }
 
 /// Index request protocols to get and save indices
-#[derive(Debug, PartialEq, Serialize, Deserialize, Message)]
+#[derive(Debug, PartialEq, Encode, Decode, Message)]
 pub enum Index {
-    Get {
-        client_id: String,
-        stream_name: String,
+    #[n(0)] Get {
+        #[n(0)] client_id: String,
+        #[n(1)] stream_name: String,
     },
-    Save {
-        client_id: String,
-        stream_name: String,
-        index: Uint,
+    #[n(1)] Save {
+        #[n(0)] client_id: String,
+        #[n(1)] stream_name: String,
+        #[n(2)] index: u64,
     },
 }
 

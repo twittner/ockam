@@ -5,13 +5,13 @@ use crate::{
     Message, OckamError, Result,
 };
 use ockam_core::compat::{collections::BTreeSet, string::String, vec::Vec};
-use ockam_core::{Decodable, Uint};
-use serde::{Deserialize, Serialize};
+use ockam_core::Decodable;
+use minicbor::{Encode, Decode};
 
 /// Response to a `CreateStreamRequest`
-#[derive(Debug, PartialEq, Serialize, Deserialize, Message)]
+#[derive(Debug, PartialEq, Encode, Decode, Message)]
 pub struct Init {
-    pub stream_name: String,
+    #[n(0)] pub stream_name: String,
 }
 
 impl Init {
@@ -28,11 +28,11 @@ impl Init {
 }
 
 /// Confirm push operation on the mailbox
-#[derive(Debug, PartialEq, Serialize, Deserialize, Message)]
+#[derive(Debug, PartialEq, Encode, Decode, Message)]
 pub struct PushConfirm {
-    pub request_id: Uint,
-    pub status: Status,
-    pub index: Uint,
+    #[n(0)] pub request_id: u64,
+    #[n(1)] pub status: Status,
+    #[n(2)] pub index: u64,
 }
 
 impl PushConfirm {
@@ -51,10 +51,11 @@ impl PushConfirm {
 }
 
 /// A simple status code
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Encode, Decode)]
+#[cbor(index_only)]
 pub enum Status {
-    Ok,
-    Error,
+    #[n(0)] Ok,
+    #[n(1)] Error,
 }
 
 impl From<bool> for Status {
@@ -74,10 +75,10 @@ impl From<Option<()>> for Status {
 }
 
 /// Response to a `PullRequest`
-#[derive(Debug, PartialEq, Serialize, Deserialize, Message)]
+#[derive(Debug, PartialEq, Encode, Decode, Message)]
 pub struct PullResponse {
-    pub request_id: Uint,
-    pub messages: Vec<StreamMessage>,
+    #[n(0)] pub request_id: u64,
+    #[n(1)] pub messages: Vec<StreamMessage>,
 }
 
 impl PullResponse {
@@ -95,20 +96,20 @@ impl PullResponse {
 }
 
 /// A stream message with a reference index
-#[derive(Debug, PartialEq, Serialize, Deserialize, Message)]
+#[derive(Debug, PartialEq, Encode, Decode, Message)]
 pub struct StreamMessage {
     /// Index of the message in the stream
-    pub index: Uint,
+    #[n(0)] pub index: u64,
     /// Encoded data of the message
-    pub data: Vec<u8>,
+    #[cbor(n(1), with = "minicbor::bytes")] pub data: Vec<u8>,
 }
 
 /// The index return payload
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Encode, Decode)]
 pub struct Index {
-    pub client_id: String,
-    pub stream_name: String,
-    pub index: Option<Uint>,
+    #[n(0)] pub client_id: String,
+    #[n(1)] pub stream_name: String,
+    #[n(2)] pub index: Option<u64>,
 }
 
 /// A convenience enum to wrap all possible response types
@@ -116,12 +117,12 @@ pub struct Index {
 /// In your worker you will want to match this enum, given to you via
 /// the `ProtocolParser` abstraction.
 #[allow(clippy::enum_variant_names)]
-#[derive(Serialize, Deserialize, Message)]
+#[derive(Encode, Decode, Message)]
 pub enum Response {
-    Init(Init),
-    PushConfirm(PushConfirm),
-    PullResponse(PullResponse),
-    Index(Index),
+    #[n(0)] Init(#[n(0)] Init),
+    #[n(1)] PushConfirm(#[n(0)] PushConfirm),
+    #[n(2)] PullResponse(#[n(0)] PullResponse),
+    #[n(3)] Index(#[n(0)] Index),
 }
 
 impl ProtocolParser for Response {
@@ -139,10 +140,10 @@ impl ProtocolParser for Response {
 
     fn parse(ProtocolPayload { protocol, data }: ProtocolPayload) -> Result<Self> {
         Ok(match protocol.as_str() {
-            "stream_create" => Response::Init(Init::decode(&data)?),
-            "stream_push" => Response::PushConfirm(PushConfirm::decode(&data)?),
-            "stream_pull" => Response::PullResponse(PullResponse::decode(&data)?),
-            "stream_index" => Response::Index(Index::decode(&data)?),
+            "stream_create" => Response::Init(Decodable::decode(&data)?),
+            "stream_push" => Response::PushConfirm(Decodable::decode(&data)?),
+            "stream_pull" => Response::PullResponse(Decodable::decode(&data)?),
+            "stream_index" => Response::Index(Decodable::decode(&data)?),
             _ => return Err(OckamError::NoSuchProtocol.into()),
         })
     }

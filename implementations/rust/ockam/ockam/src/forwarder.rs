@@ -30,7 +30,7 @@ impl Worker for ForwardingService {
         msg: Routed<Self::Message>,
     ) -> Result<()> {
         let forward_route = msg.return_route();
-        let payload = msg.into_transport_message().payload;
+        let payload = msg.into_transport_message().into_payload();
         Forwarder::create(ctx, forward_route, payload).await?;
 
         Ok(())

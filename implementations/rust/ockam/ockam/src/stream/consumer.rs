@@ -63,10 +63,10 @@ async fn handle_response(
         Response::Index(IndexResp {
             stream_name, index, ..
         }) => {
-            let index = index.unwrap_or_else(|| 0.into());
-            info!("Updating index '{}' to: {}", stream_name, index.u64());
+            let index = index.unwrap_or(0);
+            info!("Updating index '{}' to: {}", stream_name, index);
             w.index_route = return_route;
-            w.idx = index.u64();
+            w.idx = index;
 
             // Queue a near-immediate fetch event -- however future
             // events will be using the specified user interval
@@ -83,7 +83,7 @@ async fn handle_response(
 
             // Update the index if we received messages
             if let Some(msg) = messages.last() {
-                w.idx = msg.index.u64() + 1;
+                w.idx = msg.index + 1;
             }
 
             for msg in messages {

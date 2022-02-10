@@ -1,19 +1,19 @@
 use ockam_core::compat::string::String;
 use ockam_core::vault::{SecretPersistence, SecretType, CURVE25519_SECRET_LENGTH};
 use ockam_vault::SecretAttributes;
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 /// Meta-Attributes about a key
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Debug, Clone, Eq, PartialEq)]
 pub enum MetaKeyAttributes {
-    SecretAttributes(SecretAttributes),
+    #[n(0)] SecretAttributes(#[n(0)] SecretAttributes),
 }
 
 /// Attributes that are used to identify key
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Debug, Clone, Eq, PartialEq)]
 pub struct KeyAttributes {
-    label: String,
-    meta: MetaKeyAttributes,
+    #[n(0)] label: String,
+    #[n(1)] meta: MetaKeyAttributes,
 }
 
 impl KeyAttributes {

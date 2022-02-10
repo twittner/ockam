@@ -1,11 +1,17 @@
 use crate::Contact;
 use ockam_core::compat::vec::Vec;
 use ockam_core::Message;
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
-#[derive(Serialize, Deserialize, Message)]
+#[derive(Encode, Decode, Message, Debug)]
 pub(crate) enum IdentityChannelMessage {
-    Request { contact: Contact, proof: Vec<u8> },
-    Response { contact: Contact, proof: Vec<u8> },
-    Confirm,
+    #[n(0)] Request {
+        #[n(0)] contact: Contact,
+        #[cbor(n(1), with = "minicbor::bytes")] proof: Vec<u8>
+    },
+    #[n(1)] Response {
+        #[n(0)] contact: Contact,
+        #[cbor(n(1), with = "minicbor::bytes")] proof: Vec<u8>
+    },
+    #[n(2)] Confirm,
 }

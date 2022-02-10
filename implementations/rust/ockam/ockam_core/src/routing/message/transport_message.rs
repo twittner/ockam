@@ -1,6 +1,6 @@
 use crate::{compat::vec::Vec, Message, Route};
 use core::fmt::{self, Display, Formatter};
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 /// A generic transport message
 ///
@@ -8,19 +8,19 @@ use serde::{Deserialize, Serialize};
 /// crate) in order to provide a mechanism for third-party developers
 /// to create custom transport channel routers.  Casual users of ockam
 /// should never have to interact with this type directly.
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Message)]
+#[derive(Encode, Decode, Debug, Clone, Hash, PartialOrd, Ord, Eq, PartialEq, Message)]
 pub struct TransportMessage {
     /// The transport protocol version
-    pub version: u8,
+    #[n(0)] pub version: u8,
     /// Onward message route
-    pub onward_route: Route,
+    #[n(1)] pub onward_route: Route,
     /// Return message route
     ///
     /// This field must be populated by routers handling this message
     /// along the way.
-    pub return_route: Route,
+    #[n(2)] pub return_route: Route,
     /// The message payload
-    pub payload: Vec<u8>,
+    #[cbor(n(3), with = "minicbor::bytes")] payload: Vec<u8>
 }
 
 impl TransportMessage {
@@ -34,8 +34,18 @@ impl TransportMessage {
             version: 1,
             onward_route: onward_route.into(),
             return_route: return_route.into(),
-            payload,
+            payload
         }
+    }
+
+    /// Get access to the payload bytes.
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+
+    /// Deconstruct this type into the payload part.
+    pub fn into_payload(self) -> Vec<u8> {
+        self.payload
     }
 }
 

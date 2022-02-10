@@ -61,8 +61,8 @@ async fn handle_response(
             // TODO: handle status == ERROR
             debug!(
                 "PushConfirm for request_id: {}, index: {}, status == {:?}",
-                request_id.u64(),
-                index.u64(),
+                request_id,
+                index,
                 status
             );
             Ok(())

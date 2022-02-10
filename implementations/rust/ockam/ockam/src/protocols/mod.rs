@@ -5,16 +5,18 @@
 
 use crate::{Message, Result};
 use ockam_core::{compat::vec::Vec, ProtocolId};
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 pub mod channel;
 pub mod pipe;
 pub mod stream;
 
 /// A protocol payload wrapper for pre-parsing
-#[derive(Debug, Serialize, Deserialize, Message)]
+#[derive(Debug, Encode, Decode, Message)]
 pub struct ProtocolPayload {
+    #[cbor(n(0))]
     pub protocol: ProtocolId,
+    #[cbor(n(1), with = "minicbor::bytes")]
     pub data: Vec<u8>,
 }
 

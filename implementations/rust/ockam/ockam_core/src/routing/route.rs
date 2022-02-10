@@ -3,12 +3,12 @@ use crate::{
     Address, Result, RouteError,
 };
 use core::fmt::{self, Display};
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 /// A full route to a peer
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Encode, Decode, Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Route {
-    inner: VecDeque<Address>,
+    #[n(0)] inner: VecDeque<Address>,
 }
 
 impl Route {

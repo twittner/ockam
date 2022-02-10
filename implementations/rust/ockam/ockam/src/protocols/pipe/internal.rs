@@ -2,43 +2,43 @@
 
 use crate::Message;
 use ockam_core::{Decodable, Result, Route, TransportMessage};
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 /// Make the sender re-send a payload
-#[derive(Debug, Serialize, Deserialize, Message)]
+#[derive(Debug, Encode, Decode, Message)]
 pub struct Resend {
-    pub idx: u64,
+    #[n(0)] pub idx: u64,
 }
 
 /// Acknowlege successful delivery
-#[derive(Debug, Serialize, Deserialize, Message)]
+#[derive(Debug, Encode, Decode, Message)]
 pub struct Ack {
-    pub idx: u64,
+    #[n(0)] pub idx: u64,
 }
 
 /// Payload sent from handshake listener to newly spawned receiver
-#[derive(Debug, Serialize, Deserialize, Message)]
+#[derive(Debug, Encode, Decode, Message)]
 pub struct Handshake {
-    pub route_to_sender: Route,
+    #[n(0)] pub route_to_sender: Route,
 }
 
 /// An enum containing all internal commands
-#[derive(Debug, Serialize, Deserialize, Message)]
+#[derive(Debug, Encode, Decode, Message)]
 pub enum InternalCmd {
     /// Issue the pipe sender to re-send
-    Resend(Resend),
+    #[n(0)] Resend(#[n(0)] Resend),
     /// Acknowlege receival of pipe message,
-    Ack(Ack),
+    #[n(1)] Ack(#[n(0)] Ack),
     /// Message received by pipe spawn listener
-    InitHandshake,
+    #[n(2)] InitHandshake,
     /// Message sent from listener to receiver
-    Handshake(Handshake),
+    #[n(3)] Handshake(#[n(0)] Handshake),
     /// Initialise a pipe sender with a route
-    InitSender,
+    #[n(4)] InitSender,
 }
 
 impl InternalCmd {
     pub fn from_transport(msg: &TransportMessage) -> Result<Self> {
-        Self::decode(&msg.payload)
+        Decodable::decode(msg.payload())
     }
 }

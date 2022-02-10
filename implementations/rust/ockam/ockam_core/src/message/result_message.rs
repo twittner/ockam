@@ -1,12 +1,11 @@
 use crate::{Message, Result};
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
-impl<M: Message + Serialize + DeserializeOwned> Message for ResultMessage<M> {}
+impl<M: Message + Encode + for<'a> Decode<'a>> Message for ResultMessage<M> {}
 
 /// Message that is meant to be sent between workers if Error-handling is needed.
-#[derive(Serialize, Deserialize)]
-pub struct ResultMessage<M: Message>(Result<M>);
+#[derive(Encode, Decode)]
+pub struct ResultMessage<M>(#[n(0)] Result<M>);
 
 impl<M> ResultMessage<M>
 where

@@ -2,19 +2,19 @@ use crate::{
     KeyExchangeCompleted, SecureChannelKeyExchanger, SecureChannelListener,
     SecureChannelNewKeyExchanger, SecureChannelVault, SecureChannelWorker,
 };
+use minicbor::{Encode, Decode};
 use ockam_core::compat::rand::random;
 use ockam_core::{Address, Result, Route};
 use ockam_node::Context;
-use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
 /// SecureChannel info returned from start_initiator_channel
 /// Auth hash can be used for further authentication of the channel
 /// and tying it up cryptographically to some source of Trust. (e.g. Entities)
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Encode, Decode, Clone, PartialEq, Debug)]
 pub struct SecureChannelInfo {
-    worker_address: Address,
-    auth_hash: [u8; 32],
+    #[n(0)] worker_address: Address,
+    #[cbor(n(1), with = "minicbor::bytes")] auth_hash: [u8; 32],
 }
 
 impl SecureChannelInfo {

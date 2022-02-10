@@ -1,10 +1,12 @@
 use crate::{compat::string::String, compat::vec::Vec, Message, TransportMessage};
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 /// Ockam Routing LocalInfo - metadata that can travel only inside one Ockam Node
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Message)]
+#[derive(Encode, Decode, Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Message)]
 pub struct LocalInfo {
+    #[n(0)]
     type_identifier: String,
+    #[cbor(n(1), with = "minicbor::bytes")]
     data: Vec<u8>,
 }
 
@@ -40,10 +42,10 @@ impl LocalInfo {
 /// from the same node, which is convenient for delegating Authentication/Authorization mechanisms
 /// to dedicated local Workers.
 ///
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Message)]
+#[derive(Encode, Decode, Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Message)]
 pub struct LocalMessage {
-    transport_message: TransportMessage,
-    local_info: Vec<LocalInfo>,
+    #[n(0)] transport_message: TransportMessage,
+    #[n(1)] local_info: Vec<LocalInfo>,
 }
 
 impl LocalMessage {

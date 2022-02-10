@@ -16,9 +16,9 @@ impl Worker for Logger {
         transport_msg.onward_route.step()?;
         transport_msg.return_route.modify().prepend(ctx.address());
 
-        let payload = transport_msg.payload.clone();
+        let payload = transport_msg.payload();
 
-        if let Ok(str) = String::from_utf8(payload.clone()) {
+        if let Ok(str) = std::str::from_utf8(payload) {
             println!("Address: {}, Received string: {}", ctx.address(), str);
         } else {
             println!("Address: {}, Received binary: {}", ctx.address(), hex::encode(&payload));

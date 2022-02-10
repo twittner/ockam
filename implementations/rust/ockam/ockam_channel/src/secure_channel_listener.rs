@@ -6,8 +6,8 @@ use ockam_core::{
     Address, Encodable, LocalMessage, Message, Result, Routed, TransportMessage, Worker,
 };
 use ockam_node::Context;
-use serde::{Deserialize, Serialize};
 use tracing::debug;
+use minicbor::{Encode, Decode};
 
 /// SecureChannelListener listens for messages from SecureChannel initiators
 /// and creates responder SecureChannels
@@ -27,10 +27,10 @@ impl<V: SecureChannelVault, N: SecureChannelNewKeyExchanger> SecureChannelListen
 }
 
 /// SecureChannelListener message wrapper.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Message)]
+#[derive(Encode, Decode, Clone, PartialEq, Debug, Message)]
 pub struct CreateResponderChannelMessage {
-    payload: Vec<u8>,
-    completed_callback_address: Option<Address>,
+    #[cbor(n(0), with = "minicbor::bytes")] payload: Vec<u8>,
+    #[n(1)] completed_callback_address: Option<Address>,
 }
 
 impl CreateResponderChannelMessage {
@@ -95,7 +95,7 @@ impl<V: SecureChannelVault, N: SecureChannelNewKeyExchanger> Worker
             .await?;
 
         // We want this message's return route lead to the remote channel worker, not listener
-        let msg = TransportMessage::v1(address_remote, reply, msg.payload().encode()?);
+        let msg = TransportMessage::v1(address_remote, reply, Encodable::encode(&msg.payload())?);
 
         ctx.forward(LocalMessage::new(msg, Vec::new())).await?;
 

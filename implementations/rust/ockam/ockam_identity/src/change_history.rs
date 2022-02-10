@@ -7,11 +7,11 @@ use crate::{
 use ockam_core::compat::vec::Vec;
 use ockam_core::{allow, deny, Encodable, Result};
 use ockam_vault::PublicKey;
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 /// Full history of [`Identity`] changes. History and corresponding secret keys are enough to recreate [`Identity`]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct IdentityChangeHistory(Vec<IdentityChangeEvent>);
+#[derive(Clone, Debug, Encode, Decode)]
+pub(crate) struct IdentityChangeHistory(#[n(0)] Vec<IdentityChangeEvent>);
 
 impl IdentityChangeHistory {
     pub(crate) fn new(change_events: Vec<IdentityChangeEvent>) -> Self {
@@ -128,8 +128,7 @@ impl IdentityChangeHistory {
         vault: &mut impl IdentityVault,
     ) -> Result<bool> {
         let change_block = new_change_event.change_block();
-        let change_block_binary = change_block
-            .encode()
+        let change_block_binary = Encodable::encode(change_block)
             .map_err(|_| IdentityError::BareError)?;
 
         let event_id = vault.sha256(&change_block_binary).await?;

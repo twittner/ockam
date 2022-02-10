@@ -1,14 +1,14 @@
 use crate::{IdentityError, IdentityIdentifier};
 use ockam_core::{Decodable, Encodable, LocalInfo, LocalMessage, Result};
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 /// Identity SecureChannel LocalInfo unique Identifier
 pub const IDENTITY_SECURE_CHANNEL_IDENTIFIER: &str = "IDENTITY_SECURE_CHANNEL_IDENTIFIER";
 
 /// Identity SecureChannel LocalInfo used for LocalMessage
-#[derive(Serialize, Deserialize)]
+#[derive(Encode, Decode)]
 pub struct IdentitySecureChannelLocalInfo {
-    their_identity_id: IdentityIdentifier,
+    #[n(0)] their_identity_id: IdentityIdentifier,
 }
 
 impl IdentitySecureChannelLocalInfo {
@@ -17,7 +17,7 @@ impl IdentitySecureChannelLocalInfo {
             return Err(IdentityError::InvalidLocalInfoType.into());
         }
 
-        if let Ok(info) = IdentitySecureChannelLocalInfo::decode(value.data()) {
+        if let Ok(info) = Decodable::decode(value.data()) {
             return Ok(info);
         }
 
@@ -27,7 +27,7 @@ impl IdentitySecureChannelLocalInfo {
     pub fn to_local_info(&self) -> Result<LocalInfo> {
         Ok(LocalInfo::new(
             IDENTITY_SECURE_CHANNEL_IDENTIFIER.into(),
-            self.encode()?,
+            Encodable::encode(self)?,
         ))
     }
 

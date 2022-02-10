@@ -3,7 +3,7 @@ use ockam_core::{
     compat::{collections::BTreeMap, string::String, vec::Vec},
     Decodable, Encodable, Message, Result,
 };
-use serde::{Deserialize, Serialize};
+use minicbor::{bytes::ByteVec, Encode, Decode};
 
 /// A message metadata wrapper type
 ///
@@ -28,15 +28,15 @@ use serde::{Deserialize, Serialize};
 /// generic metadata.  This data is passed around for every nested
 /// scope and must be re-attached to the outest-most scope when
 /// peeling a nested message stack.
-#[derive(Message, Serialize, Deserialize)]
+#[derive(Message, Encode, Decode, Debug)]
 #[non_exhaustive]
 pub struct OckamMessage {
     /// Main data section of this message
-    pub data: Vec<u8>,
+    #[cbor(n(0), with="minicbor::bytes")] pub data: Vec<u8>,
     /// Metadata for this specific scope
-    pub scope: Vec<Vec<u8>>,
+    #[n(1)] pub scope: Vec<ByteVec>,
     /// Metadata that is carried to the final recipient of the message
-    pub generic: Option<Metadata>,
+    #[n(2)] pub generic: Option<Metadata>,
 }
 
 impl OckamMessage {
@@ -52,7 +52,7 @@ impl OckamMessage {
     pub fn wrap(mut prev: Self) -> Result<Self> {
         let generic = core::mem::replace(&mut prev.generic, None);
         Ok(Self {
-            data: prev.encode()?,
+            data: Encodable::encode(&prev)?,
             scope: vec![],
             generic,
         })
@@ -60,7 +60,7 @@ impl OckamMessage {
 
     /// Add some metadata to this scope
     pub fn scope_data(mut self, meta: Vec<u8>) -> Self {
-        self.scope.push(meta);
+        self.scope.push(meta.into());
         self
     }
 
@@ -70,7 +70,7 @@ impl OckamMessage {
             self.generic = Some(Metadata(BTreeMap::new()));
         }
 
-        self.generic.as_mut().unwrap().insert(key.into(), val);
+        self.generic.as_mut().unwrap().insert(key.into(), val.into());
         self
     }
 
@@ -80,18 +80,18 @@ impl OckamMessage {
     /// OckamMessage!
     pub fn peel(mut self) -> Result<Self> {
         let generic = core::mem::replace(&mut self.generic, None);
-        let mut peeled = Self::decode(&self.data)?;
+        let mut peeled: Self = Decodable::decode(&self.data)?;
         peeled.generic = generic;
         Ok(peeled)
     }
 }
 
 /// An encoding for message metadata
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Metadata(BTreeMap<String, Vec<u8>>);
+#[derive(Debug, Encode, Decode)]
+pub struct Metadata(#[n(0)] BTreeMap<String, ByteVec>);
 
 impl Deref for Metadata {
-    type Target = BTreeMap<String, Vec<u8>>;
+    type Target = BTreeMap<String, ByteVec>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -110,9 +110,9 @@ impl DerefMut for Metadata {
 /// attached with scope metadata to indicate the message index.
 #[test]
 fn nest_metadata() {
-    #[derive(Serialize, Deserialize, Message, PartialEq, Debug, Clone)]
+    #[derive(Encode, Decode, Message, PartialEq, Debug, Clone)]
     struct FakePipeMsg {
-        vec: Vec<u8>,
+        #[cbor(n(0), with = "minicbor::bytes")] vec: Vec<u8>
     }
 
     let base_msg = FakePipeMsg {
@@ -137,14 +137,14 @@ fn nest_metadata() {
         .unwrap()
         .get("msg_type")
         .unwrap();
-    assert_eq!(msg_type, "pipemsg".as_bytes());
+    assert_eq!(msg_type.as_slice(), "pipemsg".as_bytes());
 
     let index = ockam_msg2.scope.get(0).unwrap();
-    assert_eq!(index, &vec![1]);
+    assert_eq!(index, &vec![1].into());
 
     // Then we peel the previous message type
     let ockam_msg1 = ockam_msg2.peel().unwrap();
-    let base_msg_other_side = FakePipeMsg::decode(&ockam_msg1.data).unwrap();
+    let base_msg_other_side: FakePipeMsg = Decodable::decode(&ockam_msg1.data).unwrap();
 
     assert_eq!(base_msg, base_msg_other_side);
 }

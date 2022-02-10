@@ -104,14 +104,13 @@ pub struct IdentitySerializationUtil;
 impl IdentitySerializationUtil {
     /// Serialize [`Contact`] in binary form for storing/transferring over the network
     pub fn serialize_contact(contact: &Contact) -> Result<Vec<u8>> {
-        contact
-            .encode()
+        Encodable::encode(contact)
             .map_err(|_| IdentityError::BareError.into())
     }
 
     /// Deserialize [`Contact`] from binary form
     pub fn deserialize_contact(contact: &[u8]) -> Result<Contact> {
-        let contact = Contact::decode(contact).map_err(|_| IdentityError::BareError)?;
+        let contact: Contact = Decodable::decode(contact).map_err(|_| IdentityError::BareError)?;
 
         Ok(contact)
     }

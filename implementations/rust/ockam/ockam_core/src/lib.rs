@@ -49,7 +49,6 @@ mod error;
 mod message;
 mod processor;
 mod routing;
-mod uint;
 pub mod vault;
 mod worker;
 
@@ -59,7 +58,6 @@ pub use message::*;
 pub use processor::*;
 pub use routing::*;
 pub use traits::*;
-pub use uint::*;
 pub use worker::*;
 
 #[cfg(feature = "std")]
@@ -96,4 +94,44 @@ pub mod traits {
             Ok(self.clone())
         }
     }
+}
+
+/// Implement encode/decode functionality for `hashbrown::HashMap` which
+/// does not have impls for `minicbor::{Encode, Decode}`.
+pub mod hashbrown_cbor {
+    use hashbrown::HashMap;
+    use minicbor::{Encode, Decode, Encoder, Decoder};
+    use minicbor::encode::Write;
+
+    /// Encode this `HashMap` to CBOR.
+    pub fn encode<K, V, S, W>(map: &HashMap<K, V, S>, e: &mut Encoder<W>) -> Result<(), minicbor::encode::Error<W::Error>>
+    where
+        K: Encode,
+        V: Encode,
+        W: Write
+    {
+        e.map(map.len() as u64)?;
+        for (k, v) in map {
+            k.encode(e)?;
+            v.encode(e)?;
+        }
+        Ok(())
+    }
+
+    /// Decode a `HashMap` from CBOR.
+    pub fn decode<'b, K, V, S>(d: &mut Decoder<'b>) -> Result<HashMap<K, V, S>, minicbor::decode::Error>
+    where
+        K: Decode<'b> + core::hash::Hash + Eq,
+        V: Decode<'b>,
+        S: core::hash::BuildHasher + Default
+    {
+        let mut m = HashMap::default();
+        let iter: minicbor::decode::MapIter<K, V> = d.map_iter()?;
+        for x in iter {
+            let (k, v) = x?;
+            m.insert(k, v);
+        }
+        Ok(m)
+    }
+
 }

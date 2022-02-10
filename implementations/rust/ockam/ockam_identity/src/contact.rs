@@ -1,5 +1,5 @@
 /// Contact is an abstraction responsible for storing user's public data (mainly - public keys).
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 use ockam_vault::PublicKey;
 
@@ -23,10 +23,10 @@ use ockam_core::{allow, deny, Result};
 /// Creating [`Contact`] from [`Identity`](crate::Identity)
 ///
 /// TODO
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Encode, Decode, Clone, Debug)]
 pub struct Contact {
-    identifier: IdentityIdentifier,
-    change_history: IdentityChangeHistory,
+    #[n(0)] identifier: IdentityIdentifier,
+    #[n(1)] change_history: IdentityChangeHistory,
 }
 
 impl Contact {

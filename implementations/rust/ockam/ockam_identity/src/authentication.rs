@@ -3,11 +3,11 @@ use ockam_core::compat::vec::Vec;
 use ockam_core::vault::Signature;
 use ockam_core::{Decodable, Encodable, Result};
 use ockam_vault::{PublicKey, Secret};
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Encode, Decode)]
 pub(crate) struct AuthenticationProof {
-    signature: Signature,
+    #[n(0)] signature: Signature,
 }
 
 impl AuthenticationProof {
@@ -34,7 +34,7 @@ impl Authentication {
 
         let proof = AuthenticationProof::new(signature);
 
-        proof.encode().map_err(|_| IdentityError::BareError.into())
+        Encodable::encode(&proof).map_err(|_| IdentityError::BareError.into())
     }
 
     pub(crate) async fn verify_proof<V: IdentityVault>(
@@ -43,7 +43,7 @@ impl Authentication {
         proof: &[u8],
         vault: &mut V,
     ) -> Result<bool> {
-        let proof = AuthenticationProof::decode(proof).map_err(|_| IdentityError::BareError)?;
+        let proof: AuthenticationProof = Decodable::decode(proof).map_err(|_| IdentityError::BareError)?;
 
         vault
             .verify(proof.signature(), responder_public_key, channel_state)

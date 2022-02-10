@@ -17,11 +17,11 @@ use ockam_core::{
 use ockam_key_exchange_core::NewKeyExchanger;
 use ockam_key_exchange_xx::{XXNewKeyExchanger, XXVault};
 use ockam_node::Context;
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 use tracing::{debug, info, warn};
 
-#[derive(Serialize, Deserialize, Message)]
-pub(crate) struct AuthenticationConfirmation(pub Address);
+#[derive(Encode, Decode, Message, Debug)]
+pub(crate) struct AuthenticationConfirmation(#[n(0)] pub Address);
 
 trait StartSecureChannelFuture: Future<Output = Result<SecureChannelInfo>> + Send + 'static {}
 
@@ -178,7 +178,7 @@ impl<I: IdentityTrait, T: TrustPolicy> SecureChannelWorker<I, T> {
             Some(self_local_address.clone()),
         );
 
-        let msg = TransportMessage::v1(onward_route, return_route, body.encode()?);
+        let msg = TransportMessage::v1(onward_route, return_route, Encodable::encode(&body)?);
 
         let state = State::ResponderWaitForKex(ResponderWaitForKex {
             first_responder_address,
@@ -215,7 +215,7 @@ impl<I: IdentityTrait, T: TrustPolicy> SecureChannelWorker<I, T> {
         msg: Routed<<Self as Worker>::Message>,
         mut state: ResponderWaitForKex<I, T>,
     ) -> Result<()> {
-        let kex_msg = KeyExchangeCompleted::decode(msg.payload())?;
+        let kex_msg: KeyExchangeCompleted = Decodable::decode(msg.payload())?;
 
         // Prove we posses Identity key
         let proof = state
@@ -257,7 +257,7 @@ impl<I: IdentityTrait, T: TrustPolicy> SecureChannelWorker<I, T> {
             return Err(IdentityError::UnknownChannelMsgDestination.into());
         }
 
-        let body = IdentityChannelMessage::decode(msg.payload())?;
+        let body: IdentityChannelMessage = Decodable::decode(msg.payload())?;
 
         // Wait for responder to send us his Identity and Identity Proof.
         // In case of using Noise XX this is m4 message.
@@ -351,7 +351,7 @@ impl<I: IdentityTrait, T: TrustPolicy> SecureChannelWorker<I, T> {
             return Err(IdentityError::UnknownChannelMsgDestination.into());
         }
 
-        let body = IdentityChannelMessage::decode(msg.payload())?;
+        let body: IdentityChannelMessage = Decodable::decode(msg.payload())?;
 
         // Wait for responder to send us his Identity and Identity Proof.
         // In case of using Noise XX this is m4 message.
@@ -492,7 +492,7 @@ impl<I: IdentityTrait, T: TrustPolicy> SecureChannelWorker<I, T> {
 
         let local_msg = msg.into_local_message();
         let mut local_info = local_msg.local_info().to_vec();
-        let payload = local_msg.into_transport_message().payload;
+        let payload = local_msg.into_transport_message().into_payload();
 
         // Forward to local workers
         let _ = onward_route.step()?;

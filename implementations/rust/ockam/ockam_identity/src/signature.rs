@@ -1,22 +1,23 @@
 use ockam_core::vault::Signature as OckamVaultSignature;
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 /// Types of proof signatures.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Encode, Decode, Debug, Clone, Copy, Eq, PartialEq)]
+#[cbor(index_only)]
 pub enum SignatureType {
     /// Root signature
-    RootSign,
+    #[n(0)] RootSign,
     /// Self signature
-    SelfSign,
+    #[n(1)] SelfSign,
     /// Signature using previous key
-    PrevSign,
+    #[n(2)] PrevSign,
 }
 
 /// Signature, its type and data
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct Signature {
-    stype: SignatureType,
-    data: OckamVaultSignature,
+    #[n(0)] stype: SignatureType,
+    #[n(1)] data: OckamVaultSignature,
 }
 
 impl Signature {

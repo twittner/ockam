@@ -48,10 +48,10 @@ impl PipeReceiver {
     async fn handle_external(&mut self, ctx: &mut Context, msg: Routed<Any>) -> Result<()> {
         // Convert Routed<Any> into PipeMessage + relevant metadata
         let return_route = msg.return_route();
-        let pipe_msg = PipeMessage::decode(&msg.into_transport_message().payload)?;
+        let pipe_msg = PipeMessage::decode(msg.into_transport_message().payload())?;
         debug!(
             "Received pipe message with index '{}'",
-            pipe_msg.index.u64()
+            pipe_msg.index
         );
 
         // Before we send we give all hooks a chance to run

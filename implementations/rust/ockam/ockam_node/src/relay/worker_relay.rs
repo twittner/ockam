@@ -36,18 +36,12 @@ where
     /// Convenience function to handle an incoming direct message
     #[inline]
     fn handle_direct(msg: &LocalMessage, msg_addr: Address) -> Result<(M, Route)> {
-        let TransportMessage {
-            ref payload,
-            ref return_route,
-            ..
-        } = msg.transport();
-
-        parser::message::<M>(payload)
+        parser::message::<M>(msg.transport().payload())
             .map_err(|e| {
                 error!("Failed to decode message payload for worker {}", msg_addr);
                 e
             })
-            .map(|m| (m, return_route.clone()))
+            .map(|m| (m, msg.transport().return_route.clone()))
     }
 
     #[inline]

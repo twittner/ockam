@@ -73,7 +73,7 @@ impl ReceiverAddress {
         let (addr, local_msg) = routed.dissolve();
 
         let transport = TransportMessage::decode(&stream_msg.data).unwrap();
-        T::decode(&transport.payload).map(|t| Routed::new(t, addr, local_msg))
+        T::decode(transport.payload()).map(|t| Routed::new(t, addr, local_msg))
     }
 }
 

@@ -613,7 +613,7 @@ impl Context {
             let (addr, data) = msg.local_msg();
 
             // FIXME: make message parsing idempotent to avoid cloning
-            match parser::message(&data.transport().payload).ok() {
+            match parser::message(data.transport().payload()).ok() {
                 Some(msg) => break Ok((msg, data, addr)),
                 None => {
                     // Requeue

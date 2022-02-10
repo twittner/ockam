@@ -8,15 +8,15 @@ use ockam_core::compat::{
     vec::Vec,
 };
 use ockam_core::{Address, Any, LocalMessage, Result, Route, Routed, TransportMessage, Worker};
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 use tracing::{debug, info};
 
 /// Information about a remotely forwarded worker.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Message)]
+#[derive(Encode, Decode, Clone, PartialEq, Debug, Message)]
 pub struct RemoteForwarderInfo {
-    forwarding_route: Route,
-    remote_address: String,
-    worker_address: Address,
+    #[n(0)] forwarding_route: Route,
+    #[n(1)] remote_address: String,
+    #[n(2)] worker_address: Address,
 }
 
 impl RemoteForwarderInfo {
@@ -121,7 +121,7 @@ impl Worker for RemoteForwarder {
         msg: Routed<Self::Message>,
     ) -> Result<()> {
         let return_route = msg.return_route();
-        let payload = msg.into_transport_message().payload;
+        let payload = msg.into_transport_message().into_payload();
         debug!("RemoteForwarder received message");
 
         let msg = TransportMessage::v1(self.destination.clone(), return_route, payload);

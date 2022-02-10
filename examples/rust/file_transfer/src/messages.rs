@@ -1,18 +1,18 @@
 use ockam::Message;
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Encode, Decode, Debug)]
 pub struct FileDescription {
-    pub name: String,
-    pub size: usize,
+    #[n(0)] pub name: String,
+    #[n(1)] pub size: usize,
 }
 impl Message for FileDescription {}
 
-#[derive(Serialize, Deserialize)]
+#[derive(Encode, Decode, Debug)]
 pub enum FileData {
-    Description(FileDescription),
-    Data(Vec<u8>),
-    Quit,
+    #[n(0)] Description(#[n(0)] FileDescription),
+    #[n(1)] Data(#[cbor(n(0), with = "minicbor::bytes")] Vec<u8>),
+    #[n(2)] Quit,
 }
 
 impl Message for FileData {}

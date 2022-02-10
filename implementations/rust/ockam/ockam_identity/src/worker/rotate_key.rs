@@ -7,13 +7,13 @@ use crate::{
 use ockam_core::vault::PublicKey;
 use ockam_core::vault::Signature as OckamVaultSignature;
 use ockam_core::{Encodable, Result};
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 /// RotateKeyChangeData
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct RotateKeyChangeData {
-    key_attributes: KeyAttributes,
-    public_key: PublicKey,
+    #[n(0)] key_attributes: KeyAttributes,
+    #[n(1)] public_key: PublicKey,
 }
 
 impl RotateKeyChangeData {
@@ -38,11 +38,11 @@ impl RotateKeyChangeData {
 }
 
 /// RotateKeyChange
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct RotateKeyChange {
-    data: RotateKeyChangeData,
-    self_signature: OckamVaultSignature,
-    prev_signature: OckamVaultSignature,
+    #[n(0)] data: RotateKeyChangeData,
+    #[n(1)] self_signature: OckamVaultSignature,
+    #[n(2)] prev_signature: OckamVaultSignature,
 }
 
 impl RotateKeyChange {
@@ -101,7 +101,7 @@ impl<V: IdentityVault> IdentityState<V> {
         let public_key = self.vault.secret_public_key_get(&secret_key).await?;
 
         let data = RotateKeyChangeData::new(key_attributes, public_key);
-        let data_binary = data.encode().map_err(|_| IdentityError::BareError)?;
+        let data_binary = Encodable::encode(&data).map_err(|_| IdentityError::BareError)?;
         let data_hash = self.vault.sha256(data_binary.as_slice()).await?;
         let self_signature = self.vault.sign(&secret_key, &data_hash).await?;
         let prev_signature = self.vault.sign(&last_key_in_chain, &data_hash).await?;
@@ -113,8 +113,7 @@ impl<V: IdentityVault> IdentityState<V> {
             IdentityChangeType::RotateKey(change),
         );
         let change_block = ChangeBlock::new(prev_event_id, identity_change);
-        let change_block_binary = change_block
-            .encode()
+        let change_block_binary = Encodable::encode(&change_block)
             .map_err(|_| IdentityError::BareError)?;
 
         let event_id = self.vault.sha256(&change_block_binary).await?;

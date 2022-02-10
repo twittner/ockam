@@ -3,18 +3,18 @@ use crate::{
     Message, ProtocolId, Result,
 };
 use ockam_core::{compat::collections::BTreeSet, Decodable};
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 /// A protocol exchanged between a stream consumer and stream producer
-#[derive(Debug, Serialize, Deserialize, Message)]
+#[derive(Debug, Encode, Decode, Message)]
 pub enum StreamWorkerCmd {
     /// Trigger a fetch event
     ///
     /// These events are fired from worker to _itself_ to create a
     /// delayed reactive response
-    Fetch,
+    #[n(0)] Fetch,
     /// Pull messages from the consumer's buffer
-    Pull { num: usize },
+    #[n(1)] Pull { #[n(0)] num: usize },
 }
 
 impl StreamWorkerCmd {
@@ -41,6 +41,6 @@ impl ProtocolParser for StreamWorkerCmd {
     }
 
     fn parse(pp: ProtocolPayload) -> Result<Self> {
-        StreamWorkerCmd::decode(&pp.data)
+        Decodable::decode(&pp.data)
     }
 }

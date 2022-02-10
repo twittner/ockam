@@ -100,7 +100,7 @@ impl BehaviorHook for ReceiverOrdering {
         ctx: &mut Context,
         msg: &PipeMessage,
     ) -> Result<PipeModifier> {
-        let index = msg.index.u64();
+        let index = msg.index;
         match self.compare_index(index) {
             IndexState::Low => {
                 warn!("Ignoring message with index {}", index);

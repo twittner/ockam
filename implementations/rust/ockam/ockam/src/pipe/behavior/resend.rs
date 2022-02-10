@@ -33,13 +33,13 @@ impl BehaviorHook for SenderConfirm {
         ctx: &mut Context,
         msg: &PipeMessage,
     ) -> Result<PipeModifier> {
-        self.on_route.insert(msg.index.u64(), msg.clone());
+        self.on_route.insert(msg.index, msg.clone());
 
         DelayedEvent::new(
             ctx,
             this.into(),
             InternalCmd::Resend(Resend {
-                idx: msg.index.u64(),
+                idx: msg.index,
             }),
         )
         .await?
@@ -99,12 +99,12 @@ impl BehaviorHook for ReceiverConfirm {
     ) -> Result<PipeModifier> {
         debug!(
             "Sending delivery ACK for message index '{}'",
-            msg.index.u64()
+            msg.index
         );
         ctx.send(
             sender,
             InternalCmd::Ack(Ack {
-                idx: msg.index.u64(),
+                idx: msg.index,
             }),
         )
         .await

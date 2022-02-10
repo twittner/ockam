@@ -1,7 +1,7 @@
 use crate::IdentityIdentifier;
 use ockam_core::{async_trait, compat::boxed::Box};
 use ockam_core::{AsyncTryClone, Result};
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 mod trust_identifier_policy;
 pub use trust_identifier_policy::*;
@@ -14,9 +14,9 @@ pub use trust_everyone_policy::*;
 mod trust_public_key_policy;
 pub use trust_public_key_policy::*;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Encode, Decode)]
 pub struct SecureChannelTrustInfo {
-    their_identity_id: IdentityIdentifier,
+    #[n(0)] their_identity_id: IdentityIdentifier,
     // TODO: credentials:
 }
 

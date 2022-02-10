@@ -1,5 +1,5 @@
 use cfg_if::cfg_if;
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 use zeroize::Zeroize;
 
 /// Curve25519 private key length
@@ -50,9 +50,9 @@ cfg_if! {
 }
 
 /// Binary representation of a Secret.
-#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, Zeroize)]
+#[derive(Encode, Decode, Clone, Debug, Eq, PartialEq, Zeroize)]
 #[zeroize(drop)]
-pub struct SecretKey(SecretKeyVec);
+pub struct SecretKey(#[cbor(n(0), with = "minicbor::bytes")] SecretKeyVec);
 
 impl SecretKey {
     /// Create a new secret key
@@ -68,11 +68,11 @@ impl AsRef<[u8]> for SecretKey {
 }
 
 /// A public key
-#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, Zeroize)]
+#[derive(Encode, Decode, Clone, Debug, Eq, PartialEq, Zeroize)]
 #[zeroize(drop)]
 pub struct PublicKey {
-    data: PublicKeyVec,
-    stype: SecretType,
+    #[cbor(n(0), with = "minicbor::bytes")] data: PublicKeyVec,
+    #[n(1)] stype: SecretType,
 }
 
 impl PublicKey {
@@ -100,9 +100,9 @@ impl AsRef<[u8]> for PublicKey {
 }
 
 ///Binary representation of Signature
-#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, Zeroize)]
+#[derive(Encode, Decode, Clone, Debug, Eq, PartialEq, Zeroize)]
 #[zeroize(drop)]
-pub struct Signature(SignatureVec);
+pub struct Signature(#[cbor(n(0), with = "minicbor::bytes")] SignatureVec);
 
 impl Signature {
     /// Create a new signature
@@ -118,36 +118,38 @@ impl AsRef<[u8]> for Signature {
 }
 
 /// All possible [`SecretType`]s
-#[derive(Serialize, Deserialize, Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
+#[derive(Encode, Decode, Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
+#[cbor(index_only)]
 pub enum SecretType {
     /// Secret buffer
-    Buffer,
+    #[n(0)] Buffer,
     /// AES key
-    Aes,
+    #[n(1)] Aes,
     /// Curve 22519 key
-    X25519,
+    #[n(2)] X25519,
     /// Curve 22519 key
-    Ed25519,
+    #[n(3)] Ed25519,
     /// BLS key
     #[cfg(feature = "bls")]
-    Bls,
+    #[n(4)] Bls,
 }
 
 /// Possible [`SecretKey`]'s persistence
-#[derive(Serialize, Deserialize, Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Encode, Decode, Copy, Clone, Debug, Eq, PartialEq)]
+#[cbor(index_only)]
 pub enum SecretPersistence {
     /// An ephemeral/temporary secret
-    Ephemeral,
+    #[n(0)] Ephemeral,
     /// A persistent secret
-    Persistent,
+    #[n(1)] Persistent,
 }
 
 /// Attributes for a specific vault [`SecretKey`]
-#[derive(Serialize, Deserialize, Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Encode, Decode, Copy, Clone, Debug, Eq, PartialEq)]
 pub struct SecretAttributes {
-    stype: SecretType,
-    persistence: SecretPersistence,
-    length: usize,
+    #[n(0)] stype: SecretType,
+    #[n(1)] persistence: SecretPersistence,
+    #[n(2)] length: usize,
 }
 
 impl SecretAttributes {

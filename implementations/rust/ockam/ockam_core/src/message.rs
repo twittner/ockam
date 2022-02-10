@@ -9,7 +9,7 @@ use core::{
     fmt::{self, Debug, Display, Formatter},
     ops::{Deref, DerefMut},
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use minicbor::{bytes::ByteVec, Encode, Decode};
 
 /// Alias of the type used for encoded data.
 pub type Encoded = Vec<u8>;
@@ -19,8 +19,8 @@ pub type Encoded = Vec<u8>;
 /// When creating workers that should asynchronously speak different
 /// protocols, this identifier can be used to switch message parsing
 /// between delegated workers, each responsible for only one protocol.
-#[derive(Serialize, Deserialize, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
-pub struct ProtocolId(String);
+#[derive(Encode, Decode, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
+pub struct ProtocolId(#[n(0)] String);
 
 impl ProtocolId {
     /// Create a None protocol Id (with left pad)
@@ -70,33 +70,41 @@ pub trait Message: Encodable + Decodable + Send + 'static {}
 
 impl Message for () {}
 impl Message for Vec<u8> {}
+impl Message for ByteVec {}
 impl Message for String {}
 
 // Auto-implement message trait for types that _can_ be messages
 impl<T> Encodable for T
 where
-    T: Serialize,
+    T: Encode,
 {
     fn encode(&self) -> Result<Encoded> {
-        Ok(serde_bare::to_vec(self)?)
+        Ok(minicbor::to_vec(self)?)
     }
 }
 
 // Auto-implement message trait for types that _can_ be messages
 impl<T> Decodable for T
 where
-    T: DeserializeOwned,
+    T: for<'b> Decode<'b>,
 {
     fn decode(encoded: &[u8]) -> Result<Self> {
-        Ok(serde_bare::from_slice(encoded)?)
+        Ok(minicbor::decode(encoded)?)
     }
 }
 
-impl From<serde_bare::error::Error> for crate::Error {
-    fn from(_: serde_bare::error::Error) -> Self {
-        Self::new(1, "serde_bare")
+impl From<minicbor::decode::Error> for crate::Error {
+    fn from(_: minicbor::decode::Error) -> Self {
+        Self::new(1, "minicbor-decode")
     }
 }
+
+impl<E> From<minicbor::encode::Error<E>> for crate::Error {
+    fn from(_: minicbor::encode::Error<E>) -> Self {
+        Self::new(1, "minicbor-encode")
+    }
+}
+
 
 /// A message wrapper that stores message route information
 ///
@@ -182,13 +190,13 @@ impl<M: Message> Routed<M> {
     /// Get a reference to the underlying binary message payload
     #[inline]
     pub fn payload(&self) -> &[u8] {
-        &self.local_msg.transport().payload
+        &self.local_msg.transport().payload()
     }
 
     /// Get underlying binary message payload
     #[inline]
     pub fn take_payload(self) -> Vec<u8> {
-        self.local_msg.into_transport_message().payload
+        self.local_msg.into_transport_message().into_payload()
     }
 }
 

@@ -8,13 +8,13 @@ use crate::{
 use ockam_core::vault::Signature as OckamVaultSignature;
 use ockam_core::vault::{PublicKey, Secret};
 use ockam_core::{Encodable, Result};
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 /// Key change data creation
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct CreateKeyChangeData {
-    key_attributes: KeyAttributes,
-    public_key: PublicKey,
+    #[n(0)] key_attributes: KeyAttributes,
+    #[n(1)] public_key: PublicKey,
 }
 
 impl CreateKeyChangeData {
@@ -39,10 +39,10 @@ impl CreateKeyChangeData {
 }
 
 /// Key change creation
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct CreateKeyChange {
-    data: CreateKeyChangeData,
-    self_signature: OckamVaultSignature,
+    #[n(0)] data: CreateKeyChangeData,
+    #[n(1)] self_signature: OckamVaultSignature,
 }
 
 impl CreateKeyChange {
@@ -95,7 +95,7 @@ impl<V: IdentityVault> IdentityState<V> {
         let public_key = vault.secret_public_key_get(&secret_key).await?;
 
         let data = CreateKeyChangeData::new(key_attributes, public_key);
-        let data_binary = data.encode().map_err(|_| IdentityError::BareError)?;
+        let data_binary = Encodable::encode(&data).map_err(|_| IdentityError::BareError)?;
         let data_hash = vault.sha256(data_binary.as_slice()).await?;
         let self_signature = vault.sign(&secret_key, &data_hash).await?;
         let change = CreateKeyChange::new(data, self_signature);
@@ -107,8 +107,7 @@ impl<V: IdentityVault> IdentityState<V> {
         );
 
         let change_block = ChangeBlock::new(prev_id, identity_change);
-        let change_block_binary = change_block
-            .encode()
+        let change_block_binary = Encodable::encode(&change_block)
             .map_err(|_| IdentityError::BareError)?;
 
         let event_id = vault.sha256(&change_block_binary).await?;

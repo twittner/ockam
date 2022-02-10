@@ -4,11 +4,11 @@ use ockam_core::compat::string::String;
 use ockam_core::hex::encode;
 use ockam_core::vault::{Hasher, KeyId};
 use ockam_core::{Error, Result};
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 /// An identifier of an Identity.
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize, Default)]
-pub struct IdentityIdentifier(KeyId);
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Encode, Decode, Default)]
+pub struct IdentityIdentifier(#[n(0)] KeyId);
 
 /// Unique [`crate::Identity`] identifier, computed as SHA256 of root public key
 impl IdentityIdentifier {
@@ -57,8 +57,8 @@ impl TryFrom<String> for IdentityIdentifier {
 }
 
 /// Unique [`crate::IdentityChangeEvent`] identifier, computed as SHA256 of the event data
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
-pub struct EventIdentifier([u8; 32]);
+#[derive(Encode, Decode, Debug, Clone, Eq, PartialEq, Hash)]
+pub struct EventIdentifier(#[cbor(n(0), with = "minicbor::bytes")] [u8; 32]);
 
 impl AsRef<[u8]> for EventIdentifier {
     fn as_ref(&self) -> &[u8] {

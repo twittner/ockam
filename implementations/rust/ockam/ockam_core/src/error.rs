@@ -2,7 +2,7 @@
 
 use crate::compat::string::String;
 use core::fmt::{self, Display, Formatter};
-use serde::{Deserialize, Serialize};
+use minicbor::{Encode, Decode};
 
 /// The type of errors returned by Ockam functions.
 ///
@@ -22,12 +22,12 @@ use serde::{Deserialize, Serialize};
 ///
 /// 1. __Error Code__: A `u32` representing the the presise error.
 ///
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Encode, Decode, Debug)]
 pub struct Error {
-    code: u32,
+    #[n(0)] code: u32,
 
     #[cfg(feature = "alloc")]
-    domain: String,
+    #[n(1)] domain: String,
 }
 
 /// The type returned by Ockam functions.

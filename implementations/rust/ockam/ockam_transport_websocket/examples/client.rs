@@ -7,7 +7,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::io::AsyncReadExt;
 use tokio::time::{sleep, timeout, Duration};
 
-use ockam_core::{route, Result};
+use ockam_core::{try_route, Result};
 use ockam_node::Context;
 use ockam_transport_websocket::{WebSocketError, WebSocketTransport, WS};
 
@@ -35,7 +35,7 @@ async fn main(mut ctx: Context) -> Result<()> {
     let (stdin_tx, mut stdin_rx) = futures_channel::mpsc::channel(1);
     tokio::spawn(read_stdin(stdin_tx));
 
-    let route = route![(WS, peer_addr.as_str()), "echoer"];
+    let route = try_route![(WS, peer_addr.as_str()), "echoer"]?;
     while let Some(data) = stdin_rx.next().await {
         if ctx.send(route.clone(), data).await.is_err() {
             error!("Failed to send data");

@@ -92,6 +92,12 @@ impl Display for Error {
 
 impl crate::compat::error::Error for Error {}
 
+impl From<core::convert::Infallible> for Error {
+    fn from(_: core::convert::Infallible) -> Self {
+        unreachable!()
+    }
+}
+
 #[cfg(feature = "alloc")]
 #[cfg(test)]
 mod std_test {

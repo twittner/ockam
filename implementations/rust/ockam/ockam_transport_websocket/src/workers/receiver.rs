@@ -27,7 +27,7 @@ where
     pub fn new(ws_stream: SplitStream<WebSocketStream<S>>, peer: SocketAddr) -> Self {
         Self {
             ws_stream,
-            peer_addr: format!("{}#{}", crate::WS, peer).into(),
+            peer_addr: Address::new(crate::WS, peer.to_string()),
         }
     }
 }
@@ -49,7 +49,7 @@ where
                 Ok(ws_msg) => ws_msg,
                 Err(_e) => {
                     info!(
-                        "Connection to peer '{}' was closed; dropping stream",
+                        "Connection to peer '{:?}' was closed; dropping stream",
                         self.peer_addr
                     );
                     return Ok(false);
@@ -57,7 +57,7 @@ where
             },
             None => {
                 info!(
-                    "Stream connected to peer '{}' is exhausted; dropping stream",
+                    "Stream connected to peer '{:?}' is exhausted; dropping stream",
                     self.peer_addr
                 );
                 return Ok(false);
@@ -72,7 +72,7 @@ where
 
         // Heartbeat message
         if msg.onward_route.next().is_err() {
-            trace!("Got heartbeat message from: {}", self.peer_addr);
+            trace!("Got heartbeat message from: {:?}", self.peer_addr);
         }
 
         // Insert the peer address into the return route so that
@@ -80,8 +80,8 @@ where
         msg.return_route.modify().prepend(self.peer_addr.clone());
 
         // Some verbose logging we may want to remove
-        trace!("Message onward route: {}", msg.onward_route);
-        trace!("Message return route: {}", msg.return_route);
+        trace!("Message onward route: {:?}", msg.onward_route);
+        trace!("Message return route: {:?}", msg.return_route);
 
         // Forward the message to the next hop in the route
         ctx.forward(LocalMessage::new(msg, Vec::new())).await?;

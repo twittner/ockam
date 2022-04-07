@@ -32,7 +32,7 @@ impl Worker for Responder {
 
     async fn handle_message(&mut self, ctx: &mut Context, msg: Routed<String>) -> Result<()> {
         info!("Message: {}", msg);
-        debug!("Replying back to {}", &msg.return_route());
+        debug!("Replying back to {:?}", &msg.return_route());
         ctx.send(msg.return_route(), msg.body()).await?;
         Ok(())
     }

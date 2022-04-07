@@ -31,13 +31,9 @@ impl WebSocketRouterHandle {
 
     /// Register a new connection worker with this router
     pub async fn register(&self, pair: &WorkerPair) -> Result<()> {
-        let ws_address: Address = format!("{}#{}", WS, pair.peer()).into();
+        let ws_address = Address::new(WS, pair.peer().to_string());
         let mut accepts = vec![ws_address];
-        accepts.extend(
-            pair.hostnames()
-                .iter()
-                .map(|x| Address::from_string(format!("{}#{}", WS, x))),
-        );
+        accepts.extend(pair.hostnames().iter().map(|x| Address::new(WS, x)));
         let self_addr = pair.tx_addr();
         self.ctx
             .send(

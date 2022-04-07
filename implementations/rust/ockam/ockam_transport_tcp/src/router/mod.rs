@@ -1,5 +1,4 @@
 use crate::{TcpSendWorker, TCP};
-use core::ops::Deref;
 use ockam_core::{async_trait, Any};
 use ockam_core::{Address, Decodable, LocalMessage, Result, Routed, Worker};
 use ockam_node::Context;
@@ -38,7 +37,7 @@ impl TcpRouter {
 
     async fn handle_register(&mut self, accepts: Vec<Address>, self_addr: Address) -> Result<()> {
         if let Some(f) = accepts.first().cloned() {
-            trace!("TCP registration request: {} => {}", f, self_addr);
+            trace!("TCP registration request: {:?} => {:?}", f, self_addr);
         } else {
             // Should not happen
             return Err(TransportError::InvalidAddress.into());
@@ -57,7 +56,7 @@ impl TcpRouter {
     }
 
     async fn handle_unregister(&mut self, self_addr: Address) -> Result<()> {
-        trace!("TCP unregistration request: {}", &self_addr);
+        trace!("TCP unregistration request: {:?}", &self_addr);
 
         self.map.retain(|_, self_addr_i| self_addr_i != &self_addr);
 
@@ -84,7 +83,7 @@ impl TcpRouter {
 
     async fn handle_disconnect(&mut self, peer: String) -> Result<()> {
         let (peer_addr, _hostnames) = TcpRouterHandle::resolve_peer(peer)?;
-        let tcp_address: Address = format!("{}#{}", TCP, peer_addr).into();
+        let tcp_address = Address::new(TCP, peer_addr.to_string());
 
         let self_address = if let Some(self_address) = self.map.get(&tcp_address) {
             self_address.clone()
@@ -106,8 +105,13 @@ impl TcpRouter {
             return Ok(n.clone());
         }
 
-        let peer =
-            String::from_utf8(onward.deref().clone()).map_err(|_| TransportError::UnknownRoute)?;
+        let peer = {
+            if onward.transport_type() != TCP {
+                return Err(TransportError::UnknownRoute.into());
+            }
+            String::from_utf8(onward.data().to_vec()).map_err(|_| TransportError::UnknownRoute)?
+        };
+
         let (peer_addr, hostnames) = TcpRouterHandle::resolve_peer(peer.clone())?;
         let tcp_address = Address::new(TCP, peer_addr.to_string());
 
@@ -213,7 +217,7 @@ impl TcpRouter {
     pub async fn register(ctx: &Context) -> Result<TcpRouterHandle> {
         let main_addr = Address::random_local();
         let api_addr = Address::random_local();
-        debug!("Initialising new TcpRouter with address {}", &main_addr);
+        debug!("Initialising new TcpRouter with address {:?}", main_addr);
 
         let child_ctx = ctx.new_context(Address::random_local()).await?;
 

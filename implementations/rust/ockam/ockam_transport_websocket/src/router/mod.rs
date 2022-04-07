@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::ops::Deref;
 
 pub(crate) use handle::WebSocketRouterHandle;
 use ockam_core::{
@@ -50,7 +49,7 @@ impl WebSocketRouter {
 
     async fn handle_register(&mut self, accepts: Vec<Address>, self_addr: Address) -> Result<()> {
         if let Some(f) = accepts.first().cloned() {
-            trace!("WS registration request: {} => {}", f, self_addr);
+            trace!("WS registration request: {:?} => {:?}", f, self_addr);
         } else {
             // Should not happen
             return Err(TransportError::InvalidAddress.into());
@@ -76,13 +75,9 @@ impl WebSocketRouter {
             .map_err(WebSocketError::from)?;
         let pair = WorkerPair::new(&self.ctx, stream, peer_addr, hostnames).await?;
 
-        let ws_address: Address = format!("{}#{}", WS, pair.peer()).into();
+        let ws_address = Address::new(WS, pair.peer().to_string());
         let mut accepts = vec![ws_address];
-        accepts.extend(
-            pair.hostnames()
-                .iter()
-                .map(|x| Address::from_string(format!("{}#{}", WS, x))),
-        );
+        accepts.extend(pair.hostnames().iter().map(|x| Address::new(WS, x)));
         let self_addr = pair.tx_addr();
 
         self.handle_register(accepts, self_addr.clone()).await?;
@@ -105,13 +100,16 @@ impl WebSocketRouter {
             // Connection already exists
             next = n.clone();
         } else {
-            // No existing connection
-            let peer_str;
-            if let Ok(s) = String::from_utf8(onward.deref().clone()) {
-                peer_str = s;
-            } else {
+            if onward.transport_type() != WS {
                 return Err(TransportError::UnknownRoute.into());
             }
+            // No existing connection
+            let peer_str = if let Ok(s) = String::from_utf8(onward.data().to_vec()) {
+                // :-/
+                s
+            } else {
+                return Err(TransportError::UnknownRoute.into());
+            };
 
             // TODO: Check if this is the hostname and we have existing/pending connection to this IP
             if self.allow_auto_connection {
@@ -142,8 +140,8 @@ impl WebSocketRouter {
         let main_addr = Address::random_local();
         let api_addr = Address::random_local();
         debug!(
-            "Initialising new WebSocketRouter with address {}",
-            &main_addr
+            "Initialising new WebSocketRouter with address {:?}",
+            main_addr
         );
 
         let child_ctx = ctx.new_context(Address::random_local()).await?;

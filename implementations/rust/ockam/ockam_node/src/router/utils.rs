@@ -15,7 +15,7 @@ pub(super) async fn resolve(
     reply: &Sender<NodeReplyResult>,
     wrap: bool,
 ) -> Result<()> {
-    let base = format!("Resolving worker address '{}'...", addr);
+    let base = format!("Resolving worker address '{:?}'...", addr);
 
     let primary_address;
     if let Some(p) = router.map.addr_map.get(addr) {

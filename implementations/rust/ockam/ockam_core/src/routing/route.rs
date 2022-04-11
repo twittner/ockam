@@ -32,7 +32,7 @@ impl Route {
         RouteBuilder::new()
     }
 
-    /// Create a route from a `Vec` of [`Address`].
+    /// Create a route from a sequence of [`Address`]es.
     ///
     /// # Examples
     ///
@@ -47,57 +47,30 @@ impl Route {
     /// .into();
     /// # Ok::<_, ockam_core::Error>(())
     /// ```
-    ///
-    pub fn create<A: Into<Address>>(vt: Vec<A>) -> Self {
+    //
+    pub fn create<A: Into<Address>, I>(it: I) -> Self
+    where
+        I: IntoIterator<Item = A>,
+    {
         let mut route = Route::new();
-        for addr in vt {
+        for addr in it.into_iter() {
             route = route.append(addr);
         }
         route.into()
     }
 
     /// Like [`create`] but for any type that may be convertible into [`Address`].
-    pub fn try_create<T>(vt: Vec<T>) -> Result<Self>
+    pub fn try_create<T, I>(it: I) -> Result<Self>
     where
         T: TryInto<Address>,
         T::Error: Into<crate::Error>,
+        I: IntoIterator<Item = T>,
     {
         let mut route = Route::new();
-        for addr in vt {
+        for addr in it.into_iter() {
             route = route.try_append(addr)?;
         }
         Ok(route.into())
-    }
-
-    /// Parse a route from a string.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use ockam_core::Route;
-    /// if let Ok(route) = Route::parse("1#alice => bob") {
-    ///     // ["1#alice", "0#bob"]
-    ///     route
-    /// # ;
-    /// }
-    /// ```
-    ///
-    pub fn parse<S: AsRef<str>>(s: S) -> Result<Route> {
-        if s.as_ref().is_empty() {
-            return Err(RouteError::IncompleteRoute.into());
-        }
-
-        let mut r = Route::new();
-
-        for addr in s.as_ref().split("=>") {
-            r = r.try_append(addr.trim())?
-        }
-
-        if r.inner.is_empty() {
-            return Err(RouteError::IncompleteRoute.into());
-        }
-
-        Ok(r.into())
     }
 
     /// Create a new [`RouteBuilder`] from the current `Route`.
@@ -503,36 +476,15 @@ mod tests {
 
     #[test]
     fn test_route_create() {
-        let addresses = vec!["node-1", "node-2"];
+        let addresses = ["node-1", "node-2"];
         let route: Route = Route::try_create(addresses).unwrap();
         assert_eq!(route.recipient(), Address::try_from("0#node-2").unwrap());
     }
 
     #[test]
-    fn test_route_parse_empty_string() {
-        assert!(Route::parse("").is_err())
-    }
-
-    #[test]
-    fn test_route_parse_valid_input() {
-        let s = " node-1 =>node-2=> node-3 ";
-        let mut route = Route::parse(s).unwrap();
-        assert_eq!(
-            route.next().unwrap(),
-            &Address::try_from("0#node-1").unwrap()
-        );
-        assert_eq!(route.recipient(), Address::try_from("0#node-3").unwrap());
-        let _ = route.step();
-        assert_eq!(
-            route.next().unwrap(),
-            &Address::try_from("0#node-2").unwrap()
-        );
-    }
-
-    #[test]
     fn test_route_accessors_error_condition() {
         let s = "node-1";
-        let mut route = Route::parse(s).unwrap();
+        let mut route = Route::try_create([s]).unwrap();
         let _ = route.step();
         validate_error(route.step().err().unwrap());
         validate_error(route.next().err().unwrap());
@@ -541,7 +493,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Route::recipient failed on invalid Route!")]
     fn test_route_no_recipient() {
-        let mut route = Route::parse("node-1=>node-2").unwrap();
+        let mut route = Route::try_create(["node-1", "node-2"]).unwrap();
         let _ = route.step();
         let _ = route.step();
         route.recipient();

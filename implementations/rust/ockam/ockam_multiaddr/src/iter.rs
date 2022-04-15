@@ -1,5 +1,4 @@
 use crate::{Code, Error, Registry, DEFAULT_REGISTRY};
-use alloc::sync::Arc;
 use unsigned_varint::decode;
 
 /// Iterator over binary protocol values.
@@ -15,7 +14,7 @@ pub struct BytesIter<'a> {
     bytes: &'a [u8],
     offset: usize,
     is_err: bool,
-    registry: Arc<Registry>,
+    registry: Registry,
 }
 
 impl<'a> BytesIter<'a> {
@@ -28,7 +27,7 @@ impl<'a> BytesIter<'a> {
         }
     }
 
-    pub fn with_registry(bytes: &'a [u8], reg: Arc<Registry>) -> Self {
+    pub fn with_registry(bytes: &'a [u8], reg: Registry) -> Self {
         BytesIter {
             bytes,
             offset: 0,
@@ -82,7 +81,7 @@ impl<'a> Iterator for BytesIter<'a> {
 pub struct StrIter<'a> {
     string: &'a str,
     is_err: bool,
-    registry: Arc<Registry>,
+    registry: Registry,
 }
 
 impl<'a> StrIter<'a> {
@@ -94,7 +93,7 @@ impl<'a> StrIter<'a> {
         }
     }
 
-    pub fn with_registry(string: &'a str, reg: Arc<Registry>) -> Self {
+    pub fn with_registry(string: &'a str, reg: Registry) -> Self {
         StrIter {
             string,
             is_err: false,

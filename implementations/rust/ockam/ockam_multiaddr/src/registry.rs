@@ -5,7 +5,12 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use core::fmt;
 
+#[derive(Clone)]
 pub struct Registry {
+    inner: Arc<RegistryImpl>,
+}
+
+struct RegistryImpl {
     bytes: BTreeMap<Code, Arc<dyn Codec>>,
     strings: BTreeMap<&'static str, Arc<dyn Codec>>,
 }
@@ -40,23 +45,23 @@ impl Default for Registry {
 
 impl Registry {
     pub fn get_by_code(&self, code: Code) -> Option<Arc<dyn Codec>> {
-        self.bytes.get(&code).cloned()
+        self.inner.bytes.get(&code).cloned()
     }
 
     pub fn get_by_prefix(&self, prefix: &str) -> Option<Arc<dyn Codec>> {
-        self.strings.get(prefix).cloned()
+        self.inner.strings.get(prefix).cloned()
     }
 
     pub fn codes(&self) -> impl Iterator<Item = Code> + '_ {
-        self.bytes.keys().copied()
+        self.inner.bytes.keys().copied()
     }
 
     pub fn prefixes(&self) -> impl Iterator<Item = &str> + '_ {
-        self.strings.keys().copied()
+        self.inner.strings.keys().copied()
     }
 }
 
-pub struct RegistryBuilder(Registry);
+pub struct RegistryBuilder(RegistryImpl);
 
 impl Default for RegistryBuilder {
     fn default() -> Self {
@@ -66,7 +71,7 @@ impl Default for RegistryBuilder {
 
 impl RegistryBuilder {
     pub fn new() -> Self {
-        RegistryBuilder(Registry {
+        RegistryBuilder(RegistryImpl {
             bytes: BTreeMap::new(),
             strings: BTreeMap::new(),
         })
@@ -90,6 +95,8 @@ impl RegistryBuilder {
     }
 
     pub fn finish(self) -> Registry {
-        self.0
+        Registry {
+            inner: Arc::new(self.0),
+        }
     }
 }

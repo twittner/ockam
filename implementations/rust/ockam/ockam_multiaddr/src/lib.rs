@@ -9,7 +9,6 @@ pub mod codec;
 pub mod iter;
 pub mod proto;
 
-use alloc::sync::Arc;
 use core::fmt;
 use once_cell::sync::Lazy;
 use tinyvec::TinyVec;
@@ -18,7 +17,7 @@ pub use error::Error;
 pub use registry::{Registry, RegistryBuilder};
 
 /// Global default registry of known protocols.
-static DEFAULT_REGISTRY: Lazy<Arc<Registry>> = Lazy::new(|| Arc::new(Registry::default()));
+static DEFAULT_REGISTRY: Lazy<Registry> = Lazy::new(Registry::default);
 
 /// Component of a [`MultiAddr`].
 ///
@@ -151,7 +150,7 @@ impl<'a> ProtoValue<'a> {
 #[derive(Debug)]
 pub struct MultiAddr {
     dat: TinyVec<[u8; 24]>,
-    reg: Arc<Registry>,
+    reg: Registry,
 }
 
 impl Default for MultiAddr {
@@ -162,7 +161,7 @@ impl Default for MultiAddr {
 
 impl MultiAddr {
     /// Create an empty address with an explicit protocol codec registry.
-    pub fn new(r: Arc<Registry>) -> Self {
+    pub fn new(r: Registry) -> Self {
         MultiAddr {
             dat: TinyVec::new(),
             reg: r,
@@ -173,7 +172,7 @@ impl MultiAddr {
     ///
     /// Alternative to the corresponding `TryFrom` impl, accepting an explicit
     /// protocol codec registry.
-    pub fn try_from_str(input: &str, r: Arc<Registry>) -> Result<Self, Error> {
+    pub fn try_from_str(input: &str, r: Registry) -> Result<Self, Error> {
         let iter = iter::StrIter::with_registry(input, r.clone());
         let mut b = TinyVec::new();
         for pair in iter {
@@ -188,7 +187,7 @@ impl MultiAddr {
     ///
     /// Alternative to the corresponding `TryFrom` impl, accepting an explicit
     /// protocol codec registry.
-    pub fn try_from_bytes(input: &[u8], r: Arc<Registry>) -> Result<Self, Error> {
+    pub fn try_from_bytes(input: &[u8], r: Registry) -> Result<Self, Error> {
         let iter = iter::BytesIter::with_registry(input, r.clone());
         let mut b = TinyVec::new();
         for item in iter {

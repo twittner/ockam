@@ -147,7 +147,7 @@ impl<'a> ProtoValue<'a> {
 }
 
 /// A sequence of [`Protocol`]s.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultiAddr {
     dat: TinyVec<[u8; 24]>,
     reg: Registry,

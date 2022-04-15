@@ -1,5 +1,6 @@
 use super::{Buffer, Code, Protocol};
 use crate::Error;
+use alloc::borrow::Cow;
 use core::fmt;
 use core::str::FromStr;
 use unsigned_varint::{decode, encode};
@@ -100,14 +101,20 @@ impl Protocol<'_> for Tcp {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Dns<'a>(pub &'a str);
+pub struct Dns<'a>(pub Cow<'a, str>);
+
+impl<'a> Dns<'a> {
+    pub fn new<S: Into<Cow<'a, str>>>(s: S) -> Self {
+        Dns(s.into())
+    }
+}
 
 impl<'a> Protocol<'a> for Dns<'a> {
     const CODE: Code = Code::new(53);
     const PREFIX: &'static str = "dns";
 
     fn read_str(input: &'a str) -> Result<Self, Error> {
-        Ok(Dns(input))
+        Ok(Dns(Cow::Borrowed(input)))
     }
 
     fn read_bytes(input: &'a [u8]) -> Result<Self, Error> {
@@ -116,7 +123,7 @@ impl<'a> Protocol<'a> for Dns<'a> {
             return Err(Error::required_bytes(Self::CODE, len));
         }
         let s = core::str::from_utf8(val).map_err(Error::message)?;
-        Ok(Dns(s))
+        Ok(Dns(Cow::Borrowed(s)))
     }
 
     fn write_str(&self, f: &mut fmt::Formatter) -> Result<(), Error> {

@@ -10,6 +10,14 @@ pub struct Registry {
     inner: Arc<RegistryImpl>,
 }
 
+impl PartialEq for Registry {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+
+impl Eq for Registry {}
+
 struct RegistryImpl {
     bytes: BTreeMap<Code, Arc<dyn Codec>>,
     strings: BTreeMap<&'static str, Arc<dyn Codec>>,

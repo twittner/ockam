@@ -1,25 +1,22 @@
-use super::{Buffer, Code, Protocol};
+use super::{Buffer, Checked, Code, Protocol};
 use crate::Error;
 use alloc::borrow::Cow;
 use core::fmt;
 use core::str::FromStr;
-use unsigned_varint::{decode, encode};
+use unsigned_varint::encode;
 
 #[cfg(feature = "std")]
 impl Protocol<'_> for std::net::Ipv4Addr {
     const CODE: Code = Code::new(4);
     const PREFIX: &'static str = "ip4";
 
-    fn read_str(input: &str) -> Result<Self, Error> {
-        std::net::Ipv4Addr::from_str(input).map_err(|e| Error::custom(e.into()))
+    fn read_str(input: Checked<&str>) -> Result<Self, Error> {
+        std::net::Ipv4Addr::from_str(&input).map_err(|e| Error::custom(e.into()))
     }
 
-    fn read_bytes(input: &[u8]) -> Result<Self, Error> {
-        if input.len() != 4 {
-            return Err(Error::required_bytes(Self::CODE, 4));
-        }
+    fn read_bytes(input: Checked<&[u8]>) -> Result<Self, Error> {
         let mut b = [0; 4];
-        b.copy_from_slice(input);
+        b.copy_from_slice(&input);
         Ok(std::net::Ipv4Addr::from(b))
     }
 
@@ -41,16 +38,13 @@ impl Protocol<'_> for std::net::Ipv6Addr {
     const CODE: Code = Code::new(41);
     const PREFIX: &'static str = "ip6";
 
-    fn read_str(input: &str) -> Result<Self, Error> {
-        std::net::Ipv6Addr::from_str(input).map_err(|e| Error::custom(e.into()))
+    fn read_str(input: Checked<&str>) -> Result<Self, Error> {
+        std::net::Ipv6Addr::from_str(&input).map_err(|e| Error::custom(e.into()))
     }
 
-    fn read_bytes(input: &[u8]) -> Result<Self, Error> {
-        if input.len() != 16 {
-            return Err(Error::required_bytes(Self::CODE, 16));
-        }
+    fn read_bytes(input: Checked<&[u8]>) -> Result<Self, Error> {
         let mut b = [0; 16];
-        b.copy_from_slice(input);
+        b.copy_from_slice(&input);
         Ok(std::net::Ipv6Addr::from(b))
     }
 
@@ -74,16 +68,13 @@ impl Protocol<'_> for Tcp {
     const CODE: Code = Code::new(6);
     const PREFIX: &'static str = "tcp";
 
-    fn read_str(input: &str) -> Result<Self, Error> {
-        u16::from_str(input).map(Tcp).map_err(Error::message)
+    fn read_str(input: Checked<&str>) -> Result<Self, Error> {
+        u16::from_str(&input).map(Tcp).map_err(Error::message)
     }
 
-    fn read_bytes(input: &[u8]) -> Result<Self, Error> {
-        if input.len() != 2 {
-            return Err(Error::required_bytes(Self::CODE, 2));
-        }
+    fn read_bytes(input: Checked<&[u8]>) -> Result<Self, Error> {
         let mut b = [0; 2];
-        b.copy_from_slice(input);
+        b.copy_from_slice(&input);
         Ok(Tcp(u16::from_be_bytes(b)))
     }
 
@@ -113,16 +104,12 @@ impl<'a> Protocol<'a> for Dns<'a> {
     const CODE: Code = Code::new(53);
     const PREFIX: &'static str = "dns";
 
-    fn read_str(input: &'a str) -> Result<Self, Error> {
-        Ok(Dns(Cow::Borrowed(input)))
+    fn read_str(input: Checked<&'a str>) -> Result<Self, Error> {
+        Ok(Dns(Cow::Borrowed(input.0)))
     }
 
-    fn read_bytes(input: &'a [u8]) -> Result<Self, Error> {
-        let (len, val) = decode::usize(input)?;
-        if val.len() != len {
-            return Err(Error::required_bytes(Self::CODE, len));
-        }
-        let s = core::str::from_utf8(val).map_err(Error::message)?;
+    fn read_bytes(input: Checked<&'a [u8]>) -> Result<Self, Error> {
+        let s = core::str::from_utf8(&input).map_err(Error::message)?;
         Ok(Dns(Cow::Borrowed(s)))
     }
 

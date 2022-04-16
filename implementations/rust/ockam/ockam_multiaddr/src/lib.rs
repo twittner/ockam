@@ -10,6 +10,7 @@ pub mod iter;
 pub mod proto;
 
 use core::fmt;
+use core::ops::Deref;
 use once_cell::sync::Lazy;
 use tinyvec::TinyVec;
 
@@ -43,14 +44,14 @@ pub trait Protocol<'a>: Sized {
     /// Registered protocol prefix.
     const PREFIX: &'static str;
 
-    /// Parse the string value (without prefix) of this protocol.
-    fn read_str(input: &'a str) -> Result<Self, Error>;
+    /// Parse the string value of this protocol.
+    fn read_str(input: Checked<&'a str>) -> Result<Self, Error>;
 
     /// Write the protocol as a string, including the prefix.
     fn write_str(&self, f: &mut fmt::Formatter) -> Result<(), Error>;
 
-    /// Decode the binary value (without code) of this protocol.
-    fn read_bytes(input: &'a [u8]) -> Result<Self, Error>;
+    /// Decode the binary value of this protocol.
+    fn read_bytes(input: Checked<&'a [u8]>) -> Result<Self, Error>;
 
     /// Write the protocol as a binary value, including the code.
     fn write_bytes(&self, buf: &mut dyn Buffer);
@@ -59,22 +60,35 @@ pub trait Protocol<'a>: Sized {
 /// Type that understands how to read and write [`Protocol`]s.
 pub trait Codec: Send + Sync {
     /// Split input string into the value and the remainder.
-    fn split_str<'a>(&self, prefix: &str, input: &'a str) -> Result<(&'a str, &'a str), Error>;
+    fn split_str<'a>(
+        &self,
+        prefix: &str,
+        input: &'a str,
+    ) -> Result<(Checked<&'a str>, &'a str), Error>;
 
     /// Split input bytes into the value and the remainder.
-    fn split_bytes<'a>(&self, code: Code, input: &'a [u8]) -> Result<(&'a [u8], &'a [u8]), Error>;
+    fn split_bytes<'a>(
+        &self,
+        code: Code,
+        input: &'a [u8],
+    ) -> Result<(Checked<&'a [u8]>, &'a [u8]), Error>;
 
     /// Are the given input bytes valid w.r.t. the code?
-    fn is_valid_bytes(&self, code: Code, input: &[u8]) -> bool;
+    fn is_valid_bytes(&self, code: Code, value: Checked<&[u8]>) -> bool;
 
     /// Decode the string value and encode it into the buffer.
-    fn transcode_str(&self, prefix: &str, value: &str, buf: &mut dyn Buffer) -> Result<(), Error>;
+    fn transcode_str(
+        &self,
+        prefix: &str,
+        value: Checked<&str>,
+        buf: &mut dyn Buffer,
+    ) -> Result<(), Error>;
 
     /// Decode the bytes value and encode it into the formatter.
     fn transcode_bytes(
         &self,
         code: Code,
-        value: &[u8],
+        value: Checked<&[u8]>,
         f: &mut fmt::Formatter,
     ) -> Result<(), Error>;
 }
@@ -93,6 +107,22 @@ impl Buffer for alloc::vec::Vec<u8> {
 impl<A: tinyvec::Array<Item = u8>> Buffer for TinyVec<A> {
     fn extend_with(&mut self, buf: &[u8]) {
         self.extend_from_slice(buf)
+    }
+}
+
+/// Asserts that the wrapped value has been subject to some inspection.
+///
+/// Checked values are usually produced by codecs and ensure that certain
+/// protocol specific premisses are fulfilled by the inner value. It is
+/// safe to pass checked values to methods of the [`Protocol`] trait.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Checked<T>(pub T);
+
+impl<T> Deref for Checked<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -127,8 +157,8 @@ pub struct ProtoValue<'a> {
 
 #[derive(Debug, Clone)]
 enum Bytes<'a> {
-    Slice(&'a [u8]),
-    Vector(TinyVec<[u8; 24]>),
+    Slice(Checked<&'a [u8]>),
+    Vector(Checked<TinyVec<[u8; 24]>>),
 }
 
 impl<'a> ProtoValue<'a> {
@@ -137,17 +167,28 @@ impl<'a> ProtoValue<'a> {
         self.code
     }
 
+    /// Get the checked data.
+    pub fn data(&self) -> Checked<&[u8]> {
+        match &self.data {
+            Bytes::Slice(s) => *s,
+            Bytes::Vector(v) => Checked(v),
+        }
+    }
+
     /// Try to convert into a typed protocol value.
     pub fn convert<P: Protocol<'a>>(&'a self) -> Result<P, Error> {
-        match &self.data {
-            Bytes::Slice(s) => P::read_bytes(s),
-            Bytes::Vector(v) => P::read_bytes(v),
-        }
+        P::read_bytes(self.data())
+    }
+}
+
+impl<'a> AsRef<[u8]> for ProtoValue<'a> {
+    fn as_ref(&self) -> &[u8] {
+        &self.data()
     }
 }
 
 /// A sequence of [`Protocol`]s.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct MultiAddr {
     dat: TinyVec<[u8; 24]>,
     reg: Registry,
@@ -158,6 +199,14 @@ impl Default for MultiAddr {
         MultiAddr::new(DEFAULT_REGISTRY.clone())
     }
 }
+
+impl PartialEq for MultiAddr {
+    fn eq(&self, other: &Self) -> bool {
+        self.dat.eq(&other.dat)
+    }
+}
+
+impl Eq for MultiAddr {}
 
 impl MultiAddr {
     /// Create an empty address with an explicit protocol codec registry.
@@ -226,7 +275,7 @@ impl MultiAddr {
     /// O(n) in the number of protocols.
     pub fn pop_back<'a, 'b>(&'a mut self) -> Option<ProtoValue<'b>> {
         let iter = ValidBytesIter(iter::BytesIter::with_registry(&self.dat, self.reg.clone()));
-        if let Some((o, c, p)) = iter.last() {
+        if let Some((o, c, Checked(p))) = iter.last() {
             let valuelen = p.len();
             let mut last = self.dat.split_off(o);
             let lastlen = last.len();
@@ -234,7 +283,7 @@ impl MultiAddr {
             value.shrink_to_fit(); // potentially inlines the bytes
             Some(ProtoValue {
                 code: c,
-                data: Bytes::Vector(value),
+                data: Bytes::Vector(Checked(value)),
             })
         } else {
             None
@@ -255,10 +304,7 @@ impl MultiAddr {
     ///
     /// O(n) in the number of protocols.
     pub fn last(&self) -> Option<ProtoValue> {
-        self.iter().last().map(|(c, b)| ProtoValue {
-            code: c,
-            data: Bytes::Slice(b),
-        })
+        self.iter().last()
     }
 
     /// Get an iterator over the protocol components.
@@ -272,9 +318,9 @@ impl MultiAddr {
 
 impl fmt::Display for MultiAddr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (code, value) in self.iter() {
-            let codec = self.reg.get_by_code(code).expect("valid code");
-            if let Err(e) = codec.transcode_bytes(code, value, f) {
+        for proto in self.iter() {
+            let codec = self.reg.get_by_code(proto.code()).expect("valid code");
+            if let Err(e) = codec.transcode_bytes(proto.code(), proto.data(), f) {
                 if let error::ErrorImpl::Format(e) = e.into_impl() {
                     return Err(e);
                 }
@@ -317,10 +363,13 @@ impl From<MultiAddr> for alloc::vec::Vec<u8> {
 pub struct ProtoIter<'a>(ValidBytesIter<'a>);
 
 impl<'a> Iterator for ProtoIter<'a> {
-    type Item = (Code, &'a [u8]);
+    type Item = ProtoValue<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().map(|(_, c, p)| (c, p))
+        self.0.next().map(|(_, c, p)| ProtoValue {
+            code: c,
+            data: Bytes::Slice(p),
+        })
     }
 }
 
@@ -330,7 +379,7 @@ impl<'a> Iterator for ProtoIter<'a> {
 struct ValidBytesIter<'a>(iter::BytesIter<'a>);
 
 impl<'a> Iterator for ValidBytesIter<'a> {
-    type Item = (usize, Code, &'a [u8]);
+    type Item = (usize, Code, Checked<&'a [u8]>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next().map(|x| x.expect("valid protocol"))
@@ -348,10 +397,10 @@ mod tests {
         ma.push_back(Ipv4Addr::from([127, 0, 0, 1])).unwrap();
         ma.push_back(Ipv4Addr::from([192, 168, 0, 1])).unwrap();
 
-        for (code, slice) in ma.iter() {
-            match code {
-                Ipv4Addr::CODE => println!("{}", Ipv4Addr::read_bytes(slice).unwrap()),
-                _ => println!("unknown code {code:?}"),
+        for proto in ma.iter() {
+            match proto.code() {
+                Ipv4Addr::CODE => println!("{}", Ipv4Addr::read_bytes(proto.data()).unwrap()),
+                code => println!("unknown code {code}"),
             }
         }
     }
@@ -369,5 +418,15 @@ mod tests {
             ma.pop_back();
             println!("> {}", ma)
         }
+    }
+
+    #[test]
+    fn three() {
+        let ma = MultiAddr::try_from(
+            "/ip4/127.0.0.1/tcp/80/ip4/192.168.0.1/ip6/::1/tcp/443/dns/example.com/tcp/80",
+        )
+        .unwrap();
+        let vec: Vec<u8> = ma.into();
+        MultiAddr::try_from(vec.as_slice()).unwrap();
     }
 }

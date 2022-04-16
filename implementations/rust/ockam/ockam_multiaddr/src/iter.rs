@@ -1,4 +1,4 @@
-use crate::{Code, Error, Registry, DEFAULT_REGISTRY};
+use crate::{Checked, Code, Error, Registry, DEFAULT_REGISTRY};
 use unsigned_varint::decode;
 
 /// Iterator over binary protocol values.
@@ -38,7 +38,7 @@ impl<'a> BytesIter<'a> {
 }
 
 impl<'a> Iterator for BytesIter<'a> {
-    type Item = Result<(usize, Code, &'a [u8]), Error>;
+    type Item = Result<(usize, Code, Checked<&'a [u8]>), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.offset >= self.bytes.len() || self.is_err {
@@ -103,7 +103,7 @@ impl<'a> StrIter<'a> {
 }
 
 impl<'a> Iterator for StrIter<'a> {
-    type Item = Result<(&'a str, &'a str), Error>;
+    type Item = Result<(&'a str, Checked<&'a str>), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.string.is_empty() || self.is_err {

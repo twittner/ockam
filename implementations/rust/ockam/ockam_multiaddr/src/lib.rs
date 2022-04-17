@@ -1,3 +1,12 @@
+//! An implementation of multiformats.io/multiaddr.
+//!
+//! The main entities of this crate are:
+//!
+//! - [`MultiAddr`]: A sequence of protocol values.
+//! - [`Protocol`]: A type that can be read from and written to strings and bytes.
+//! - [`Codec`]: A type that understands protocols.
+//! - [`ProtoValue`]: A section of a MultiAddr.
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
@@ -12,7 +21,7 @@ pub mod proto;
 use core::fmt;
 use core::ops::Deref;
 use once_cell::sync::Lazy;
-use tinyvec::TinyVec;
+use tinyvec::{Array, ArrayVec, TinyVec};
 
 pub use error::Error;
 pub use registry::{Registry, RegistryBuilder};
@@ -115,6 +124,11 @@ impl<A: tinyvec::Array<Item = u8>> Buffer for TinyVec<A> {
 /// Checked values are usually produced by codecs and ensure that certain
 /// protocol specific premisses are fulfilled by the inner value. It is
 /// safe to pass checked values to methods of the [`Protocol`] trait.
+///
+/// NB: For extensibility reasons checked values can be created by anyone,
+/// but unless you know the specific checks that a particular protocol
+/// requires you should better only pass checked values received from a
+/// codec to a protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Checked<T>(pub T);
 
@@ -276,14 +290,14 @@ impl MultiAddr {
     pub fn pop_back<'a, 'b>(&'a mut self) -> Option<ProtoValue<'b>> {
         let iter = ValidBytesIter(iter::BytesIter::with_registry(&self.dat, self.reg.clone()));
         if let Some((o, c, Checked(p))) = iter.last() {
-            let valuelen = p.len();
-            let mut last = self.dat.split_off(o);
-            let lastlen = last.len();
-            let mut value = last.split_off(lastlen - valuelen);
-            value.shrink_to_fit(); // potentially inlines the bytes
+            debug_assert!(self.dat.ends_with(p));
+            let dlen = self.dat.len();
+            let plen = p.len();
+            let val = split_off(&mut self.dat, dlen - plen);
+            self.dat.truncate(o);
             Some(ProtoValue {
                 code: c,
-                data: Bytes::Vector(Checked(value)),
+                data: Bytes::Vector(Checked(val)),
             })
         } else {
             None
@@ -313,6 +327,11 @@ impl MultiAddr {
             &self.dat,
             self.reg.clone(),
         )))
+    }
+
+    /// Drop any excess capacity.
+    pub fn shrink_to_fit(&mut self) {
+        self.dat.shrink_to_fit()
     }
 }
 
@@ -354,7 +373,10 @@ impl AsRef<[u8]> for MultiAddr {
 
 impl From<MultiAddr> for alloc::vec::Vec<u8> {
     fn from(ma: MultiAddr) -> Self {
-        ma.dat.to_vec()
+        match ma.dat {
+            TinyVec::Heap(v) => v,
+            TinyVec::Inline(a) => a.to_vec(),
+        }
     }
 }
 
@@ -386,10 +408,31 @@ impl<'a> Iterator for ValidBytesIter<'a> {
     }
 }
 
+/// Like [`TinyVec::split_off`] but attempts to inline data.
+fn split_off<A>(v: &mut TinyVec<A>, at: usize) -> TinyVec<A>
+where
+    A: Array<Item = u8>,
+{
+    match v {
+        TinyVec::Inline(a) => TinyVec::Inline(a.split_off(at)),
+        TinyVec::Heap(v) => {
+            if v.len() - at <= A::CAPACITY {
+                let mut a = ArrayVec::default();
+                a.extend_from_slice(&v[at..]);
+                v.truncate(at);
+                TinyVec::Inline(a)
+            } else {
+                TinyVec::Heap(v.split_off(at))
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{proto, MultiAddr, Protocol};
     use std::net::Ipv4Addr;
+    use tinyvec::TinyVec;
 
     #[test]
     fn one() {
@@ -428,5 +471,21 @@ mod tests {
         .unwrap();
         let vec: Vec<u8> = ma.into();
         MultiAddr::try_from(vec.as_slice()).unwrap();
+    }
+
+    #[test]
+    fn four() {
+        let mut t: TinyVec<[u8; 5]> = TinyVec::new();
+        t.extend_from_slice(b"hello");
+        assert!(t.is_inline());
+        t.extend_from_slice(b"world");
+        assert!(t.is_heap());
+        let mut v = t.clone();
+        let a = v.split_off(5);
+        assert!(a.is_heap());
+        let b = super::split_off(&mut t, 5);
+        assert!(b.is_inline());
+        assert_eq!(a, b);
+        assert_eq!(v, t);
     }
 }

@@ -35,6 +35,10 @@ impl<'a> BytesIter<'a> {
             registry: reg,
         }
     }
+
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
 }
 
 impl<'a> Iterator for BytesIter<'a> {

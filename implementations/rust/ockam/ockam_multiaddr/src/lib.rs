@@ -172,7 +172,7 @@ pub struct ProtoValue<'a> {
 #[derive(Debug, Clone)]
 enum Bytes<'a> {
     Slice(Checked<&'a [u8]>),
-    Vector(Checked<TinyVec<[u8; 24]>>),
+    Owned(Checked<TinyVec<[u8; 24]>>),
 }
 
 impl<'a> ProtoValue<'a> {
@@ -185,13 +185,27 @@ impl<'a> ProtoValue<'a> {
     pub fn data(&self) -> Checked<&[u8]> {
         match &self.data {
             Bytes::Slice(s) => *s,
-            Bytes::Vector(v) => Checked(v),
+            Bytes::Owned(v) => Checked(v),
         }
     }
 
     /// Try to convert into a typed protocol value.
     pub fn convert<P: Protocol<'a>>(&'a self) -> Result<P, Error> {
         P::read_bytes(self.data())
+    }
+
+    /// Clone an owned value of this type.
+    pub fn to_owned<'b>(&self) -> ProtoValue<'b> {
+        match &self.data {
+            Bytes::Slice(Checked(s)) => ProtoValue {
+                code: self.code,
+                data: Bytes::Owned(Checked(TinyVec::Heap(Vec::from(*s)))),
+            },
+            Bytes::Owned(Checked(v)) => ProtoValue {
+                code: self.code,
+                data: Bytes::Owned(Checked(v.clone())),
+            },
+        }
     }
 }
 
@@ -205,6 +219,7 @@ impl<'a> AsRef<[u8]> for ProtoValue<'a> {
 #[derive(Debug, Clone)]
 pub struct MultiAddr {
     dat: TinyVec<[u8; 24]>,
+    off: usize,
     reg: Registry,
 }
 
@@ -216,7 +231,7 @@ impl Default for MultiAddr {
 
 impl PartialEq for MultiAddr {
     fn eq(&self, other: &Self) -> bool {
-        self.dat.eq(&other.dat)
+        self.dat[self.off..].eq(&other.dat[other.off..])
     }
 }
 
@@ -227,6 +242,7 @@ impl MultiAddr {
     pub fn new(r: Registry) -> Self {
         MultiAddr {
             dat: TinyVec::new(),
+            off: 0,
             reg: r,
         }
     }
@@ -243,7 +259,11 @@ impl MultiAddr {
             let codec = r.get_by_prefix(prefix).unwrap();
             codec.transcode_str(prefix, value, &mut b)?;
         }
-        Ok(MultiAddr { dat: b, reg: r })
+        Ok(MultiAddr {
+            dat: b,
+            off: 0,
+            reg: r,
+        })
     }
 
     /// Try to decode the given bytes as a multi-address.
@@ -261,17 +281,21 @@ impl MultiAddr {
             }
         }
         b.extend_from_slice(input);
-        Ok(MultiAddr { dat: b, reg: r })
+        Ok(MultiAddr {
+            dat: b,
+            off: 0,
+            reg: r,
+        })
     }
 
     /// Does this multi-address contain any protocol components?
     pub fn is_empty(&self) -> bool {
-        self.dat.is_empty()
+        self.dat[self.off..].is_empty()
     }
 
     /// Address length in bytes.
     pub fn len(&self) -> usize {
-        self.dat.len()
+        self.dat[self.off..].len()
     }
 
     /// Add a protocol to the end of this address.
@@ -288,16 +312,41 @@ impl MultiAddr {
     ///
     /// O(n) in the number of protocols.
     pub fn pop_back<'a, 'b>(&'a mut self) -> Option<ProtoValue<'b>> {
-        let iter = ValidBytesIter(iter::BytesIter::with_registry(&self.dat, self.reg.clone()));
+        let iter = ValidBytesIter(iter::BytesIter::with_registry(
+            &self.dat[self.off..],
+            self.reg.clone(),
+        ));
         if let Some((o, c, Checked(p))) = iter.last() {
             debug_assert!(self.dat.ends_with(p));
-            let dlen = self.dat.len();
+            let dlen = self.len();
             let plen = p.len();
-            let val = split_off(&mut self.dat, dlen - plen);
-            self.dat.truncate(o);
+            let val = split_off(&mut self.dat, self.off + dlen - plen);
+            self.dat.truncate(self.off + o);
             Some(ProtoValue {
                 code: c,
-                data: Bytes::Vector(Checked(val)),
+                data: Bytes::Owned(Checked(val)),
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Remove and return the first protocol component.
+    pub fn pop_front(&mut self) -> Option<ProtoValue> {
+        let mut iter = ValidBytesIter(iter::BytesIter::with_registry(
+            &self.dat[self.off..],
+            self.reg.clone(),
+        ));
+        if let Some((_, c, Checked(p))) = iter.next() {
+            let end = self.off + iter.0.offset();
+            let len = p.len();
+            let start = end - len;
+            let val = &self.dat[start..end];
+            self.off = end;
+            debug_assert_eq!(val, p);
+            Some(ProtoValue {
+                code: c,
+                data: Bytes::Slice(Checked(val)),
             })
         } else {
             None
@@ -308,9 +357,12 @@ impl MultiAddr {
     ///
     /// O(n) in the number of protocols.
     pub fn drop_last(&mut self) {
-        let iter = ValidBytesIter(iter::BytesIter::with_registry(&self.dat, self.reg.clone()));
+        let iter = ValidBytesIter(iter::BytesIter::with_registry(
+            &self.dat[self.off..],
+            self.reg.clone(),
+        ));
         if let Some((o, _, _)) = iter.last() {
-            self.dat.truncate(o)
+            self.dat.truncate(self.off + o)
         }
     }
 
@@ -324,7 +376,7 @@ impl MultiAddr {
     /// Get an iterator over the protocol components.
     pub fn iter(&self) -> ProtoIter {
         ProtoIter(ValidBytesIter(iter::BytesIter::with_registry(
-            &self.dat,
+            &self.dat[self.off..],
             self.reg.clone(),
         )))
     }
@@ -367,16 +419,7 @@ impl TryFrom<&[u8]> for MultiAddr {
 
 impl AsRef<[u8]> for MultiAddr {
     fn as_ref(&self) -> &[u8] {
-        &self.dat
-    }
-}
-
-impl From<MultiAddr> for alloc::vec::Vec<u8> {
-    fn from(ma: MultiAddr) -> Self {
-        match ma.dat {
-            TinyVec::Heap(v) => v,
-            TinyVec::Inline(a) => a.to_vec(),
-        }
+        &self.dat[self.off..]
     }
 }
 
@@ -469,8 +512,7 @@ mod tests {
             "/ip4/127.0.0.1/tcp/80/ip4/192.168.0.1/ip6/::1/tcp/443/dns/example.com/tcp/80",
         )
         .unwrap();
-        let vec: Vec<u8> = ma.into();
-        MultiAddr::try_from(vec.as_slice()).unwrap();
+        MultiAddr::try_from(ma.as_ref()).unwrap();
     }
 
     #[test]
@@ -487,5 +529,20 @@ mod tests {
         assert!(b.is_inline());
         assert_eq!(a, b);
         assert_eq!(v, t);
+    }
+
+    #[test]
+    fn five() {
+        let mut ma = MultiAddr::try_from(
+            "/ip4/127.0.0.1/tcp/80/ip4/192.168.0.1/ip6/::1/tcp/443/dns/example.com/tcp/80",
+        )
+        .unwrap();
+        println!("> {}", ma);
+        let _ip4: Ipv4Addr = ma.pop_front().unwrap().convert().unwrap();
+        println!("> {}", ma);
+        while !ma.is_empty() {
+            ma.pop_front();
+            println!("> {}", ma)
+        }
     }
 }

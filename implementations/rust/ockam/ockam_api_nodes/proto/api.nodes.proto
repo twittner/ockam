@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package ockam.api.nodes;
+
+message CreateNode {
+    string name = 1;
+}
+
+message NodeInfo {
+    string id     = 1;
+    string name   = 2;
+    string status = 3;
+    bytes  addr   = 4;
+}
+
+message NodeInfoList {
+    repeated NodeInfo nodes = 1;
+}
+

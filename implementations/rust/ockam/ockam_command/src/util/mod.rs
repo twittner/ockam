@@ -1,20 +1,79 @@
+use std::{env, net::TcpListener, path::Path};
+
+use anyhow::{anyhow, Context};
+use minicbor::Decoder;
+use tracing::{debug, error};
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{filter::LevelFilter, fmt, EnvFilter};
+
+pub use addon::AddonCommand;
+pub use config::*;
+use ockam::{route, NodeBuilder, Route, TcpTransport, TCP};
+use ockam_api::nodes::NODEMANAGER_ADDR;
+use ockam_api::{Response, Status};
+use ockam_core::Message;
+
+use crate::CommandGlobalOpts;
+
 pub mod api;
 pub mod setup;
 
 mod addon;
-pub use addon::AddonCommand;
-
 mod config;
-pub use config::*;
-
-use anyhow::Context;
-use ockam::{route, NodeBuilder, Route, TcpTransport, TCP};
-use std::{env, net::TcpListener, path::Path};
-use tracing::error;
-use tracing_subscriber::prelude::*;
-use tracing_subscriber::{filter::LevelFilter, fmt, EnvFilter};
 
 pub const DEFAULT_CLOUD_ADDRESS: &str = "/dnsaddr/cloud.ockam.io/tcp/62526";
+
+pub fn node_api_request<ReqF, Fut, M, OutF>(
+    port: u16,
+    opts: CommandGlobalOpts,
+    req: ReqF,
+    out: OutF,
+) where
+    ReqF: FnOnce() -> Fut + Send + Sync + 'static,
+    Fut: core::future::Future<Output = anyhow::Result<M>> + Send + 'static,
+    M: Message + Sync + Send + 'static,
+    OutF: FnOnce(&mut Decoder<'_>, CommandGlobalOpts) -> anyhow::Result<String>
+        + Sync
+        + Send
+        + 'static,
+{
+    connect_to(
+        port,
+        (),
+        |ctx: ockam::Context, (), mut base_route: Route| async move {
+            let route: Route = base_route.modify().append(NODEMANAGER_ADDR).into();
+            debug!(%route, "Sending request");
+            let response: Vec<u8> = ctx
+                .send_and_receive(route, req().await.context("Failed to build request")?)
+                .await
+                .context("Failed to process request")?;
+            let mut dec = Decoder::new(&response);
+            let header = dec
+                .decode::<Response>()
+                .context("Failed to decode Response")?;
+            debug!(?header, "Received response");
+            let res = match (header.status(), header.has_body()) {
+                (Some(Status::Ok), _) => out(&mut dec, opts),
+                (Some(status), has_body) => {
+                    let err = if has_body {
+                        dec.decode::<String>().unwrap_or_else(|_| "".to_string())
+                    } else {
+                        "".to_string()
+                    };
+                    Err(anyhow!(
+                        "An error occurred while processing the request. Status code: {status:?}. {err}"
+                    ))
+                }
+                _ => Err(anyhow!("Unexpected response received from node")),
+            };
+            match res {
+                Ok(o) => println!("{o}"),
+                Err(err) => eprintln!("{err}"),
+            };
+            stop_node(ctx).await
+        },
+    );
+}
 
 /// A simple wrapper for shutting down the local embedded node (for
 /// the client side of the CLI).  Swallows errors and turns them into

@@ -3,6 +3,7 @@ use clap::{Args, Subcommand};
 pub use create::CreateCommand;
 pub use delete::DeleteCommand;
 pub use list::ListCommand;
+use ockam::Context;
 pub use show::ShowCommand;
 
 use crate::{CommandGlobalOpts, HELP_TEMPLATE};
@@ -38,12 +39,13 @@ pub enum SpaceSubcommand {
 }
 
 impl SpaceCommand {
-    pub fn run(opts: CommandGlobalOpts, cmd: SpaceCommand) {
+    pub async fn run(ctx: &mut Context, opts: CommandGlobalOpts, cmd: SpaceCommand) -> anyhow::Result<()> {
         match cmd.subcommand {
             SpaceSubcommand::Create(scmd) => CreateCommand::run(opts, scmd),
             SpaceSubcommand::Delete(scmd) => DeleteCommand::run(opts, scmd),
             SpaceSubcommand::List(scmd) => ListCommand::run(opts, scmd),
-            SpaceSubcommand::Show(scmd) => ShowCommand::run(opts, scmd),
+            SpaceSubcommand::Show(scmd) => ShowCommand::run(ctx, opts, scmd).await?,
         }
+        Ok(())
     }
 }

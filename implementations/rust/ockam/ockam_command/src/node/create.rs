@@ -109,7 +109,9 @@ impl CreateCommand {
                 }
             }
 
-            embedded_node(setup, (command, cfg.clone()));
+            if let Err(e) = embedded_node(setup, (command, cfg.clone())) {
+                eprintln!("Ockam node failed: {:?}", e,);
+            }
         } else {
             // On systems with non-obvious path setups (or during
             // development) re-executing the current binary is a more

@@ -23,6 +23,7 @@ use enroll::EnrollCommand;
 use forwarder::ForwarderCommand;
 use message::MessageCommand;
 use node::NodeCommand;
+use ockam::Context;
 use portal::PortalCommand;
 use project::ProjectCommand;
 use secure_channel::SecureChannelCommand;
@@ -42,10 +43,10 @@ use old::{add_trusted, exit_with_result, node_subcommand, print_identity, print_
 use crate::enroll::GenerateEnrollmentTokenCommand;
 use crate::identity::IdentityCommand;
 use crate::service::ServiceCommand;
-use crate::util::OckamConfig;
+use crate::util::{OckamConfig, stop_node};
 use crate::vault::VaultCommand;
 use clap::{crate_version, ArgEnum, Args, ColorChoice, Parser, Subcommand};
-use util::setup_logging;
+use util::{setup_logging, embedded_node};
 
 const HELP_TEMPLATE: &str = "\
 {before-help}
@@ -292,6 +293,18 @@ fn hide() -> bool {
 }
 
 pub fn run() {
+    let res = embedded_node(|mut ctx, ()| async {
+        let res = run_impl(&mut ctx).await;
+        stop_node(ctx).await?;
+        res
+    }, ());
+    if let Err(e) = res {
+        eprintln!("{e}");
+        std::process::exit(1)
+    }
+}
+
+pub async fn run_impl(ctx: &mut Context) -> anyhow::Result<()> {
     let ockam_command: OckamCommand =
         OckamCommand::parse_from(std::env::args().map(replace_hyphen_with_stdin));
     let cfg = OckamConfig::load();
@@ -310,7 +323,7 @@ pub fn run() {
     // but the command is not executed. This is useful to test arguments
     // without having to execute their logic.
     if opts.global_args.test_argument_parser {
-        return;
+        return Ok(());
     }
 
     let verbose = opts.global_args.verbose;
@@ -325,10 +338,10 @@ pub fn run() {
         OckamSubcommand::Message(command) => MessageCommand::run(opts, command),
         OckamSubcommand::Node(command) => NodeCommand::run(opts, command),
         OckamSubcommand::Project(command) => ProjectCommand::run(opts, command),
-        OckamSubcommand::Space(command) => SpaceCommand::run(opts, command),
+        OckamSubcommand::Space(command) => SpaceCommand::run(ctx, opts, command).await?,
         OckamSubcommand::TcpConnection(command) => TcpConnectionCommand::run(opts, command),
         OckamSubcommand::TcpListener(command) => TcpListenerCommand::run(opts, command),
-        OckamSubcommand::Portal(command) => PortalCommand::run(opts, command),
+        OckamSubcommand::Portal(command) => PortalCommand::run(ctx, opts, command).await?,
         OckamSubcommand::Configuration(command) => ConfigurationCommand::run(opts, command),
         OckamSubcommand::Vault(command) => VaultCommand::run(opts, command),
         OckamSubcommand::Identity(command) => IdentityCommand::run(opts, command),
@@ -352,4 +365,6 @@ pub fn run() {
         OckamSubcommand::PrintIdentity => node_subcommand(verbose > 0, (), print_identity),
         OckamSubcommand::PrintPath => exit_with_result(verbose > 0, print_ockam_dir()),
     }
+
+    Ok(())
 }

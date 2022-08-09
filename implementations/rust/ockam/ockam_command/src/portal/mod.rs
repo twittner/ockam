@@ -1,5 +1,6 @@
 mod create;
 pub(crate) use create::CreateCommand;
+use ockam::Context;
 
 // TODO: add delete, list, show subcommands
 
@@ -20,9 +21,9 @@ pub enum PortalSubCommand {
 }
 
 impl PortalCommand {
-    pub fn run(opts: CommandGlobalOpts, cmd: PortalCommand) {
+    pub async fn run(ctx: &mut Context, opts: CommandGlobalOpts, cmd: PortalCommand) -> anyhow::Result<()> {
         match cmd.subcommand {
-            PortalSubCommand::Create(cmd) => CreateCommand::run(opts, cmd),
+            PortalSubCommand::Create(cmd) => CreateCommand::run(ctx, opts, cmd).await,
         }
     }
 }

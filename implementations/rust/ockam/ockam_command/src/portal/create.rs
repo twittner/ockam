@@ -1,16 +1,16 @@
+use ockam_api::config::cli::NodeConfig;
 use crate::node::NodeOpts;
-use crate::util::{api, connect_to, stop_node};
+use crate::util::{api, connect};
 use crate::util::{ComposableSnippet, Operation, PortalMode, Protocol};
 use crate::CommandGlobalOpts;
 use clap::{Args, Subcommand};
-use ockam::{Context, Route};
+use ockam::{Context, Address};
 use ockam_api::error::ApiError;
 use ockam_api::{
     nodes::models::portal::{InletStatus, OutletStatus},
     nodes::NODEMANAGER_ADDR,
     Status,
 };
-use ockam_core::Address;
 use ockam_multiaddr::MultiAddr;
 
 #[derive(Clone, Debug, Args)]
@@ -88,46 +88,25 @@ impl CreateTypeCommand {
 }
 
 impl CreateCommand {
-    pub fn run(opts: CommandGlobalOpts, command: CreateCommand) {
-        let cfg = &opts.config;
-        let port = match cfg.select_node(&command.node_opts.api_node) {
-            Some(cfg) => cfg.port,
-            None => {
-                eprintln!("No such node available.  Run `ockam node list` to list available nodes");
-                std::process::exit(-1);
-            }
-        };
-
+    pub async fn run(ctx: &mut Context, opts: CommandGlobalOpts, command: CreateCommand) -> anyhow::Result<()> {
+        let nodecfg = opts.config.get_node(&command.node_opts.api_node)?;
         let composite = (&command).into();
         let node = command.node_opts.api_node.clone();
 
         match command.create_subcommand {
-            CreateTypeCommand::TcpInlet { .. } => connect_to(port, command, create_inlet),
-            CreateTypeCommand::TcpOutlet { .. } => connect_to(port, command, create_outlet),
+            CreateTypeCommand::TcpInlet { .. } => create_inlet(ctx, &nodecfg, command).await?,
+            CreateTypeCommand::TcpOutlet { .. } => create_outlet(ctx, &nodecfg, command).await?,
         }
 
         // Update the startup config
-        let startup_cfg = match cfg.get_launch_config(&node) {
-            Ok(cfg) => cfg,
-            Err(e) => {
-                eprintln!("failed to load startup configuration: {}", e);
-                std::process::exit(-1);
-            }
-        };
-
+        let startup_cfg = opts.config.get_launch_config(&node)?;
         startup_cfg.add_composite(composite);
-        if let Err(e) = startup_cfg.atomic_update().run() {
-            eprintln!("failed to update configuration: {}", e);
-            std::process::exit(-1);
-        }
+        startup_cfg.atomic_update().run()?;
+        Ok(())
     }
 }
 
-pub async fn create_inlet(
-    ctx: Context,
-    cmd: CreateCommand,
-    mut base_route: Route,
-) -> anyhow::Result<()> {
+pub async fn create_inlet(ctx: &mut Context, cfg: &NodeConfig, cmd: CreateCommand) -> anyhow::Result<()> {
     let (bind, outlet_addr) = match cmd.create_subcommand {
         CreateTypeCommand::TcpInlet { bind, outlet_addr } => (bind, outlet_addr),
         CreateTypeCommand::TcpOutlet { .. } => {
@@ -135,9 +114,11 @@ pub async fn create_inlet(
         }
     };
 
+    let mut route = connect(ctx, cfg).await?;
+
     let resp: Vec<u8> = ctx
         .send_and_receive(
-            base_route.modify().append(NODEMANAGER_ADDR),
+            route.modify().append(NODEMANAGER_ADDR),
             api::create_inlet(&bind, &outlet_addr, &cmd.alias)?,
         )
         .await?;
@@ -160,14 +141,10 @@ pub async fn create_inlet(
         _ => eprintln!("An unknown error occurred while creating an inlet..."),
     }
 
-    stop_node(ctx).await
+    Ok(())
 }
 
-pub async fn create_outlet(
-    ctx: Context,
-    cmd: CreateCommand,
-    mut base_route: Route,
-) -> anyhow::Result<()> {
+pub async fn create_outlet(ctx: &mut Context, cfg: &NodeConfig, cmd: CreateCommand) -> anyhow::Result<()> {
     let (tcp_address, worker_address) = match cmd.create_subcommand {
         CreateTypeCommand::TcpInlet { .. } => {
             return Err(ApiError::generic("Internal logic error").into())
@@ -178,9 +155,11 @@ pub async fn create_outlet(
         } => (tcp_address, worker_address),
     };
 
+    let mut route = connect(ctx, cfg).await?;
+
     let resp: Vec<u8> = ctx
         .send_and_receive(
-            base_route.modify().append(NODEMANAGER_ADDR),
+            route.modify().append(NODEMANAGER_ADDR),
             api::create_outlet(&tcp_address, worker_address.to_string(), &cmd.alias)?,
         )
         .await?;
@@ -204,5 +183,5 @@ pub async fn create_outlet(
         _ => eprintln!("An unknown error occurred while creating an outlet..."),
     }
 
-    stop_node(ctx).await
+    Ok(())
 }

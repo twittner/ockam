@@ -1,16 +1,16 @@
 use std::{env, net::TcpListener, path::Path};
 
 use anyhow::{anyhow, Context};
-use minicbor::Decoder;
+use minicbor::{Decoder, Decode, Encode};
 use tracing::{debug, error};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{filter::LevelFilter, fmt, EnvFilter};
 
 pub use addon::AddonCommand;
 pub use config::*;
-use ockam::{route, NodeBuilder, Route, TcpTransport, TCP};
+use ockam::{route, NodeBuilder, Route, TcpTransport, TCP, Address};
 use ockam_api::nodes::NODEMANAGER_ADDR;
-use ockam_api::{Response, Status};
+use ockam_api::{Response, Status, RequestBuilder};
 use ockam_core::Message;
 
 use crate::CommandGlobalOpts;
@@ -75,6 +75,40 @@ pub fn node_api_request<ReqF, Fut, M, OutF>(
     );
 }
 
+pub struct Rpc<'a> {
+    ctx: &'a ockam::Context,
+    buf: Vec<u8>
+}
+
+impl<'a> Rpc<'a> {
+    pub fn new(ctx: &'a ockam::Context) -> Self {
+        Rpc { ctx, buf: Vec::new() }
+    }
+    
+    pub async fn request<T>(&mut self, cfg: &NodeConfig, req: RequestBuilder<'_, T>) -> anyhow::Result<()>
+    where
+        T: Encode<()>
+    {
+        let buf = req.to_vec()?;
+        let mut rte = connect(&self.ctx, cfg).await?;
+        self.buf = self.ctx.send_and_receive(rte.modify().append(NODEMANAGER_ADDR), buf).await?;
+        Ok(())
+    }
+    
+    pub fn response<T>(&'a mut self) -> anyhow::Result<T>
+    where
+        T: Decode<'a, ()>
+    {
+        let mut dec = Decoder::new(&self.buf);
+        let hdr = dec.decode::<Response>()?;
+        match hdr.status() {
+            Some(Status::Ok) if hdr.has_body() => Ok(dec.decode()?),
+            Some(Status::Ok) => Err(anyhow!("missing body")),
+            Some(_) | None   => Err(anyhow!("todo"))
+        }
+    }
+}
+
 /// A simple wrapper for shutting down the local embedded node (for
 /// the client side of the CLI).  Swallows errors and turns them into
 /// eprintln logs.
@@ -103,7 +137,7 @@ where
     F: FnOnce(ockam::Context, A, Route) -> Fut + Send + Sync + 'static,
     Fut: core::future::Future<Output = anyhow::Result<()>> + Send + 'static,
 {
-    embedded_node(
+    let res = embedded_node(
         move |ctx, a| async move {
             let tcp = match TcpTransport::create(&ctx).await {
                 Ok(tcp) => tcp,
@@ -127,25 +161,37 @@ where
             Ok(())
         },
         a,
-    )
-}
-
-pub fn embedded_node<A, F, Fut>(f: F, a: A)
-where
-    A: Send + Sync + 'static,
-    F: FnOnce(ockam::Context, A) -> Fut + Send + Sync + 'static,
-    Fut: core::future::Future<Output = anyhow::Result<()>> + Send + 'static,
-{
-    let (ctx, mut executor) = NodeBuilder::without_access_control().no_logging().build();
-    let res = executor.execute(async move {
-        if let Err(e) = f(ctx, a).await {
-            eprintln!("Error {:?}", e);
-            std::process::exit(1);
-        }
-    });
+    );
     if let Err(e) = res {
         eprintln!("Ockam node failed: {:?}", e,);
     }
+}
+
+pub async fn connect(ctx: &ockam::Context, cfg: &NodeConfig) -> anyhow::Result<Route> {
+    let adr = Address::from((TCP, format!("localhost:{}", cfg.port)));
+    let tcp = TcpTransport::create(ctx).await?;
+    tcp.connect(adr.address()).await?;
+    Ok(adr.into())
+}
+
+pub fn embedded_node<A, F, Fut, T>(f: F, a: A) -> anyhow::Result<T>
+where
+    A: Send + Sync + 'static,
+    F: FnOnce(ockam::Context, A) -> Fut + Send + Sync + 'static,
+    Fut: core::future::Future<Output = anyhow::Result<T>> + Send + 'static,
+    T: Send + 'static
+{
+    let (ctx, mut executor) = NodeBuilder::without_access_control().no_logging().build();
+    executor.execute(async move {
+        match f(ctx, a).await {
+            Err(e) => {
+                eprintln!("Error {:?}", e);
+                std::process::exit(1);
+            }
+            Ok(v) => v
+        }
+    })
+    .map_err(anyhow::Error::from)
 }
 
 pub fn find_available_port() -> anyhow::Result<u16> {

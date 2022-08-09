@@ -1,11 +1,11 @@
 use clap::Args;
-use minicbor::Decoder;
 
+use ockam::Context;
 use ockam_api::cloud::space::Space;
 
 use crate::node::NodeOpts;
 use crate::util::api::CloudOpts;
-use crate::util::{api, node_api_request};
+use crate::util::{api, Rpc};
 use crate::{CommandGlobalOpts, OutputFormat};
 
 #[derive(Clone, Debug, Args)]
@@ -22,17 +22,15 @@ pub struct ShowCommand {
 }
 
 impl ShowCommand {
-    pub fn run(opts: CommandGlobalOpts, cmd: ShowCommand) {
-        let port = opts.config.get_node_port(&cmd.node_opts.api_node);
-        node_api_request(port, opts, || async { api::space::show(cmd) }, show);
+    pub async fn run(ctx: &mut Context, opts: CommandGlobalOpts, cmd: ShowCommand) -> anyhow::Result<()> {
+        let cfg = opts.config.get_node(&cmd.node_opts.api_node)?;
+        let mut rpc = Rpc::new(ctx);
+        rpc.request(&cfg, api::space::show(cmd)).await?;
+        let space: Space = rpc.response()?;
+        match opts.global_args.output_format {
+            OutputFormat::Plain => println!("{space:#?}"),
+            OutputFormat::Json => println!("{}", serde_json::to_string(&space)?)
+        }
+        Ok(())
     }
-}
-
-fn show(dec: &mut Decoder<'_>, opts: CommandGlobalOpts) -> anyhow::Result<String> {
-    let body = dec.decode::<Space>()?;
-    let output = match opts.global_args.output_format {
-        OutputFormat::Plain => format!("{body:#?}"),
-        OutputFormat::Json => serde_json::to_string(&body)?,
-    };
-    Ok(output)
 }

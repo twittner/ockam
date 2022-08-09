@@ -277,7 +277,7 @@ pub(crate) mod enroll {
 /// Helpers to create spaces API requests
 pub(crate) mod space {
     use crate::space::*;
-    use ockam_api::cloud::space::*;
+    use ockam_api::{cloud::{space::*, BareCloudRequestWrapper}, RequestBuilder};
 
     use super::*;
 
@@ -298,12 +298,9 @@ pub(crate) mod space {
         Ok(buf)
     }
 
-    pub(crate) fn show(cmd: ShowCommand) -> anyhow::Result<Vec<u8>> {
-        let mut buf = vec![];
+    pub(crate) fn show(cmd: ShowCommand) -> RequestBuilder<'static, BareCloudRequestWrapper<'static>> {
         Request::builder(Method::Get, format!("v0/spaces/{}", cmd.id))
             .body(CloudRequestWrapper::bare(cmd.cloud_opts.route()))
-            .encode(&mut buf)?;
-        Ok(buf)
     }
 
     pub(crate) fn delete(cmd: DeleteCommand) -> anyhow::Result<Vec<u8>> {
